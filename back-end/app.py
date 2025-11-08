@@ -6,7 +6,8 @@ from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
 import sqlite3, os, re, json, traceback
 from groq import Groq
-import smtplib, random
+import smtplib, random, socket, time
+from threading import Thread
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
@@ -42,7 +43,6 @@ print("FRONT_DIR exists?", os.path.exists(FRONT_DIR))
 print("index.html exists?", os.path.exists(os.path.join(FRONT_DIR, "index.html")))
 
 # ---------- Flask app ----------
-# Keep templates in PAGES_DIR; leave static_url_path="" so existing links like /styles/.. continue to work.
 app = Flask(__name__, static_folder=PAGES_DIR, static_url_path="", template_folder=PAGES_DIR)
 
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -266,7 +266,6 @@ def admin_login():
     admin_email = os.getenv("ADMIN_EMAIL")
     admin_pass = os.getenv("ADMIN_PASSWORD")
 
-    # If env vars aren't set in hosting, fail with a clear message
     if not admin_email or not admin_pass:
         return render_template(
             "admin_login.html",
@@ -275,7 +274,7 @@ def admin_login():
 
     if email == admin_email and password == admin_pass:
         session["is_admin"] = True
-        session["admin_login_test"] = "ok"  # debug flag
+        session["admin_login_test"] = "ok"
         return redirect("/admin")
 
     return render_template("admin_login.html", error="Invalid email or password. Try again.")
@@ -313,13 +312,12 @@ def admin_dashboard():
 def admin_user_credits(user_id):
     delta_raw = request.form.get("delta", "0")
     try:
-        delta = int(delta_raw)  # works for "+1" and "-1"
+        delta = int(delta_raw)
     except ValueError:
         delta = 0
 
     conn = get_db()
     cur = conn.cursor()
-    # keep credits non-negative
     cur.execute("""
         UPDATE users
         SET credits = CASE
@@ -339,7 +337,6 @@ def delete_user(user_id):
         override_id = request.form.get("user_id") or (request.json or {}).get("user_id") if request.is_json else None
         target_id = int(override_id) if override_id else int(user_id)
 
-        # Safety: don't allow deleting yourself (optional)
         if session.get("user_id") == target_id:
             print(f"[admin] Prevented self-delete: user {target_id}")
             return redirect("/admin")
@@ -359,22 +356,52 @@ def delete_user(user_id):
 
 # ---------- Email / OTP ----------
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
+    """
+    SMTP send with sensible timeouts. Supports STARTTLS: SMTP_PORT=587 (default),
+    or SMTPS when SMTP_USE_SSL=true with port 465. Returns True/False quickly.
+    """
     if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
         print("[email] SMTP not configured; skipping send.")
         return False
+
     msg = MIMEText(html_body, "html", "utf-8")
     msg["Subject"] = subject
     msg["From"] = SMTP_FROM
     msg["To"] = to_email
+
+    use_ssl = (os.getenv("SMTP_USE_SSL", "false").lower() == "true")
+
+    t0 = time.time()
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(SMTP_FROM, [to_email], msg.as_string())
+        if use_ssl:
+            with smtplib.SMTP_SSL(SMTP_HOST, int(SMTP_PORT), timeout=10) as s:
+                t_conn = time.time()
+                s.login(SMTP_USER, SMTP_PASS)
+                t_auth = time.time()
+                s.sendmail(SMTP_FROM, [to_email], msg.as_string())
+                t_send = time.time()
+        else:
+            with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT), timeout=10) as s:
+                t_conn = time.time()
+                s.starttls()
+                t_tls = time.time()
+                s.login(SMTP_USER, SMTP_PASS)
+                t_auth = time.time()
+                s.sendmail(SMTP_FROM, [to_email], msg.as_string())
+                t_send = time.time()
+                print(f"[email] timings: connect={(t_conn-t0):.3f}s  tls={(t_tls-t_conn):.3f}s  "
+                      f"auth={(t_auth-t_tls):.3f}s  send={(t_send-t_auth):.3f}s  total={(t_send-t0):.3f}s")
         return True
-    except Exception as e:
+    except (socket.timeout, smtplib.SMTPException, OSError) as e:
         print("[email] FAILED:", e)
         return False
+
+def send_email_async(to_email: str, subject: str, html_body: str, otp: str = "") -> None:
+    def _run():
+        sent = send_email(to_email, subject, html_body)
+        if not sent and os.getenv("DEV_SHOW_OTP", "false").lower() == "true" and otp:
+            print(f"[DEV_ONLY_OTP] email={to_email} otp={otp}")
+    Thread(target=_run, daemon=True).start()
 
 def generate_otp() -> str:
     return f"{random.randint(100000, 999999)}"
@@ -466,7 +493,7 @@ def login():
     if request.method == "GET":
         return send_from_directory(PAGES_DIR, "login.html")
 
-    email = (request.form.get("email") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
     password = (request.form.get("password") or "").strip()
     if not email or not password:
         return jsonify({"error": "Email and password required"}), 400
@@ -485,7 +512,7 @@ def login():
         return jsonify({"error": "Incorrect password"}), 401
     if int(user[4] or 0) == 0:
         session["pending_email"] = email
-        return redirect(f"/verify?email={email}")
+        return redirect(f"/verify?email={email}", code=303)
     session["user_id"] = user[0]
     session["user_name"] = user[1]
     return redirect("/dashboard")
@@ -496,7 +523,7 @@ def signup():
         return send_from_directory(PAGES_DIR, "signup.html")
 
     name = (request.form.get("name") or "").strip()
-    email = (request.form.get("email") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
     password = (request.form.get("password") or "").strip()
 
     if not name or not email or not password:
@@ -520,14 +547,12 @@ def signup():
     # create user (unverified)
     hashed = generate_password_hash(password)
     if using_postgres():
-        # Postgres (psycopg3): get id via RETURNING
         cur.execute(
             "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?) RETURNING id",
             (name, email, hashed, "local", 2, 0)
         )
         user_id = cur.fetchone()[0]
     else:
-        # SQLite
         cur.execute(
             "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?)",
             (name, email, hashed, "local", 2, 0)
@@ -545,7 +570,7 @@ def signup():
     )
     conn.commit()
 
-    # send email
+    # build email
     html = f"""
     <div style="font-family:Arial,sans-serif">
       <h2>Navona – Verify your email</h2>
@@ -555,13 +580,15 @@ def signup():
       <p>This code expires in {OTP_EXP_MINUTES} minutes.</p>
     </div>
     """
-    send_email(email, "Navona – Verify your email", html)
+
+    # non-blocking email send (redirect is instant)
+    send_email_async(email, "Navona – Verify your email", html, otp=otp)
 
     conn.close()
 
-    # go to verify page
+    # go to verify page (POST -> GET)
     session["pending_email"] = email
-    return redirect(f"/verify?email={email}")
+    return redirect(f"/verify?email={email}", code=303)
 
 # ---------- Static: CSS ----------
 @app.route("/styles/<path:filename>")
@@ -589,7 +616,7 @@ def verify():
         email = request.args.get("email") or session.get("pending_email") or ""
         return render_template("verify.html", email=email)
 
-    email = (request.form.get("email") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
     code = (request.form.get("otp") or "").strip()
     if not email or not code:
         return render_template("verify.html", email=email, error="Email and OTP are required.")
@@ -612,12 +639,14 @@ def verify():
         return render_template("verify.html", email=email, error="No active OTP. Please resend.")
 
     try:
-        if datetime.utcnow() > datetime.fromisoformat(otp_exp_at):
-            conn.close()
-            return render_template("verify.html", email=email, error="OTP expired. Please resend.")
+        exp = datetime.fromisoformat(otp_exp_at)
     except Exception:
         conn.close()
         return render_template("verify.html", email=email, error="Invalid OTP state. Please resend.")
+
+    if datetime.utcnow() > exp:
+        conn.close()
+        return render_template("verify.html", email=email, error="OTP expired. Please resend.")
 
     if not check_password_hash(otp_hash, code):
         conn.close()
@@ -634,7 +663,7 @@ def verify():
 
 @app.route("/resend-otp", methods=["POST"])
 def resend_otp():
-    email = (request.form.get("email") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
@@ -666,7 +695,9 @@ def resend_otp():
       <p>This code expires in {OTP_EXP_MINUTES} minutes.</p>
     </div>
     """
-    send_email(email, "Navona – Your new OTP", html)
+    # non-blocking email send
+    send_email_async(email, "Navona – Your new OTP", html, otp=otp)
+
     session["pending_email"] = email
     return jsonify({"message": "OTP resent to your email."}), 200
 
@@ -745,12 +776,10 @@ def generate_page():
     deadline = (request.form.get("deadline") or "").strip()
     resource = (request.form.get("resource_preference") or "").strip()
 
-    # Validate
     if not final_goal or not skill or not time_per_day or not deadline or not resource:
         print("[/generate] Missing fields:", final_goal, skill, time_per_day, deadline, resource)
         return redirect("/generate")
 
-    # Decrement credit (NULL-safe)
     uid = session["user_id"]
     conn = get_db()
     cur = conn.cursor()
@@ -767,13 +796,11 @@ def generate_page():
         print("[/generate] No credits left — redirecting to /dashboard")
         return redirect("/dashboard")
 
-    # Call Groq
     try:
         print("[/generate] Calling Groq...")
         roadmap = call_groq_generate_roadmap(final_goal, skill, time_per_day, deadline, resource)
         print("[/generate] Groq OK. Weeks:", len(roadmap.get("weeks", [])))
     except Exception as e:
-        # Restore credit on failure
         cur.execute("UPDATE users SET credits = COALESCE(credits,0) + 1 WHERE id=?", (uid,))
         conn.commit()
         conn.close()
@@ -810,5 +837,4 @@ def logout():
 if __name__ == "__main__":
     print("Serving HTML from:", PAGES_DIR)
     print("Serving CSS  from:", STYLES_DIR)
-    # For Render use gunicorn; this is only for local dev.
     app.run(debug=True)
