@@ -4,24 +4,22 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
-import sqlite3, os, re, json
+import sqlite3, os, re, json, traceback
 from groq import Groq
 import smtplib, random
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
-# from werkzeug.security import generate_password_hash, check_password_hash
-
-
+from urllib.parse import urlparse
 
 # ---------- Load .env ----------
 load_dotenv()  # reads back-end/.env automatically
 
-from urllib.parse import urlparse
+# ---------- Env / config ----------
 db_url = os.getenv("DATABASE_URL", "")
 print("[DB] DATABASE_URL =", db_url)
 print("[DB] Host parsed  =", urlparse(db_url).hostname)
 
-REDIRECT_URI  = os.getenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:5000/auth/google/callback")
+REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:5000/auth/google/callback")
 
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -30,25 +28,21 @@ SMTP_PASS = os.getenv("SMTP_PASS")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "")
 OTP_EXP_MINUTES = int(os.getenv("OTP_EXP_MINUTES", "10"))
 
-
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@navona.ai")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Navona@123")
 
-
-
-
 # ---------- Paths ----------
-BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APP_DIR    = os.path.dirname(os.path.abspath(__file__))
-PAGES_DIR  = os.path.join(BASE_DIR, "front-end", "pages")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONT_DIR = os.path.join(BASE_DIR, "front-end")
+PAGES_DIR = os.path.join(BASE_DIR, "front-end", "pages")
 STYLES_DIR = os.path.join(BASE_DIR, "front-end", "styles")
 
-FRONT_DIR = os.path.join(BASE_DIR, "front-end")
 print("FRONT_DIR exists?", os.path.exists(FRONT_DIR))
 print("index.html exists?", os.path.exists(os.path.join(FRONT_DIR, "index.html")))
 
-
-# templates= PAGES_DIR so we can keep Jinja pages there
+# ---------- Flask app ----------
+# Keep templates in PAGES_DIR; leave static_url_path="" so existing links like /styles/.. continue to work.
 app = Flask(__name__, static_folder=PAGES_DIR, static_url_path="", template_folder=PAGES_DIR)
 
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -57,7 +51,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "navona_dev_secret_key")
 CORS(app)
 
-import traceback
+# ---------- Groq sanity print ----------
 print("key present?", bool(os.getenv("GROQ_API_KEY")))
 try:
     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -69,42 +63,52 @@ except Exception as e:
     print("EXC STR :", str(e))
     traceback.print_exc()
 
-
+# ---------- Health ----------
 @app.route("/health")
 def health():
     return {"status": "ok"}, 200
 
-
-
-
-
-
+# ---------- Static entry ----------
 @app.route("/")
 def home():
     return send_from_directory(FRONT_DIR, "index.html")
 
-# also serve /index.html explicitly (helps if something links to it)
 @app.route("/index.html")
 def index_file():
     return send_from_directory(FRONT_DIR, "index.html")
 
+# Favicon/Icon helpers (avoid 404s in logs if files exist)
+@app.route("/favicon.ico")
+def favicon():
+    path = os.path.join(FRONT_DIR, "favicon.ico")
+    if os.path.exists(path):
+        return send_from_directory(FRONT_DIR, "favicon.ico")
+    return ("", 204)
+
+@app.route("/icon.jpg")
+def icon_jpg():
+    path = os.path.join(FRONT_DIR, "icon.jpg")
+    if os.path.exists(path):
+        return send_from_directory(FRONT_DIR, "icon.jpg")
+    return ("", 204)
 
 # ---------- DB (Postgres if DATABASE_URL set; else SQLite) ----------
 def get_db():
-    import os, sqlite3
-    url = os.getenv("DATABASE_URL", "").strip()
+    import os as _os, sqlite3 as _sqlite3
+    url = _os.getenv("DATABASE_URL", "").strip()
 
     # Normalize old scheme if present
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
 
-    # ---- Postgres path ----
+    # ---- Postgres path (psycopg 3) ----
     if url.startswith("postgresql://"):
         import psycopg
         from psycopg_pool import ConnectionPool
-    
+
         class QMarkCursor:
-            def __init__(self, cur): self._cur = cur
+            def __init__(self, cur):
+                self._cur = cur
             def execute(self, query, vars=None):
                 if vars is not None:
                     query = query.replace("?", "%s")
@@ -112,58 +116,65 @@ def get_db():
             def executemany(self, query, vars_list):
                 query = query.replace("?", "%s")
                 return self._cur.executemany(query, vars_list)
-            def fetchone(self): return self._cur.fetchone()
-            def fetchall(self): return self._cur.fetchall()
+            def fetchone(self):
+                return self._cur.fetchone()
+            def fetchall(self):
+                return self._cur.fetchall()
             @property
-            def rowcount(self): return self._cur.rowcount
-            def close(self): return self._cur.close()
-    
+            def rowcount(self):
+                return self._cur.rowcount
+            def close(self):
+                return self._cur.close()
+
         class PooledConn:
             def __init__(self, pool):
                 self._pool = pool
                 self._conn = pool.getconn()
-            def cursor(self): return QMarkCursor(self._conn.cursor())
-            def commit(self): return self._conn.commit()
-            def rollback(self): return self._conn.rollback()
+            def cursor(self):
+                return QMarkCursor(self._conn.cursor())
+            def commit(self):
+                return self._conn.commit()
+            def rollback(self):
+                return self._conn.rollback()
             def close(self):
                 if getattr(self, "_conn", None) is not None:
                     self._pool.putconn(self._conn)
                     self._conn = None
-    
+
+        # small global pool
         global _PG_POOL
         try:
             _PG_POOL
         except NameError:
             _PG_POOL = None
-    
         if _PG_POOL is None:
             _PG_POOL = ConnectionPool(url, min_size=1, max_size=5)
             print("[DB] psycopg3 pool created")
-    
+
         conn = PooledConn(_PG_POOL)
-    
+
+        # Ensure schema (safe if exists)
         cur = conn.cursor()
         cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-          name TEXT,
-          email TEXT UNIQUE,
-          password TEXT,
-          google_id TEXT,
-          provider TEXT,
-          credits INTEGER DEFAULT 2,
-          is_verified INTEGER DEFAULT 0,
-          otp_hash TEXT,
-          otp_expires_at TEXT
-        );
+            CREATE TABLE IF NOT EXISTS users (
+              id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+              name TEXT,
+              email TEXT UNIQUE,
+              password TEXT,
+              google_id TEXT,
+              provider TEXT,
+              credits INTEGER DEFAULT 2,
+              is_verified INTEGER DEFAULT 0,
+              otp_hash TEXT,
+              otp_expires_at TEXT
+            );
         """)
         conn.commit()
         return conn
 
-
     # ---- SQLite fallback ----
     db_path = os.path.join(APP_DIR, "users.db")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = _sqlite3.connect(db_path, check_same_thread=False)
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
@@ -186,12 +197,9 @@ def get_db():
     conn.commit()
     return conn
 
-
-from urllib.parse import urlparse
-
+# ---------- DB check ----------
 @app.route("/__dbcheck")
 def __dbcheck():
-    import os, traceback
     try:
         url = os.getenv("DATABASE_URL", "")
         if url.startswith("postgres://"):
@@ -211,7 +219,7 @@ def __dbcheck():
         traceback.print_exc()
         return {"ok": False, "error": str(e)}, 500
 
-
+# ---------- Admin auth guard ----------
 def admin_required(f):
     @wraps(f)
     def w(*a, **k):
@@ -236,8 +244,12 @@ def admin_required(f):
         return redirect("/admin-login")
     return w
 
-@app.route("/admin-login", methods=["GET", "POST"])
+# ---------- Admin login ----------
+@app.route("/admin-login", methods=["GET", "POST", "HEAD"])
 def admin_login():
+    if request.method == "HEAD":
+        return ("", 200)
+
     if request.method == "GET":
         return send_from_directory(PAGES_DIR, "admin_login.html")
 
@@ -245,7 +257,7 @@ def admin_login():
     password = (request.form.get("password") or "").strip()
 
     admin_email = os.getenv("ADMIN_EMAIL")
-    admin_pass  = os.getenv("ADMIN_PASSWORD")
+    admin_pass = os.getenv("ADMIN_PASSWORD")
 
     # If env vars aren't set in hosting, fail with a clear message
     if not admin_email or not admin_pass:
@@ -256,13 +268,12 @@ def admin_login():
 
     if email == admin_email and password == admin_pass:
         session["is_admin"] = True
-        session["admin_login_test"] = "ok"   # debug flag
+        session["admin_login_test"] = "ok"  # debug flag
         return redirect("/admin")
 
     return render_template("admin_login.html", error="Invalid email or password. Try again.")
 
-
-# ---------- Admin Routes (SQLite-safe) ----------
+# ---------- Admin routes ----------
 @app.route("/admin")
 @admin_required
 def admin_dashboard():
@@ -290,8 +301,6 @@ def admin_dashboard():
     ]
     return render_template("admin.html", users=users_list)
 
-
-# Increment / decrement credits by a posted delta ("+1" or "-1")
 @app.route("/admin/user/<int:user_id>/credits", methods=["POST"])
 @admin_required
 def admin_user_credits(user_id):
@@ -316,13 +325,10 @@ def admin_user_credits(user_id):
     conn.close()
     return redirect("/admin")
 
-
 @app.route("/admin/delete-user/<int:user_id>", methods=["POST"])
 @admin_required
 def delete_user(user_id):
     try:
-        # Optional: allow JSON body or override id from form if you want
-        # but the path param is primary source of truth
         override_id = request.form.get("user_id") or (request.json or {}).get("user_id") if request.is_json else None
         target_id = int(override_id) if override_id else int(user_id)
 
@@ -340,13 +346,11 @@ def delete_user(user_id):
 
         print(f"[admin] Delete user id={target_id}, affected={deleted}")
         return redirect("/admin")
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        # Avoid leaking details to the UI; log is enough
+    except Exception:
+        traceback.print_exc()
         return redirect("/admin")
 
-
-
+# ---------- Email / OTP ----------
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
     if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
         print("[email] SMTP not configured; skipping send.")
@@ -371,18 +375,13 @@ def generate_otp() -> str:
 def otp_expiry_iso() -> str:
     return (datetime.utcnow() + timedelta(minutes=OTP_EXP_MINUTES)).isoformat()
 
-
-
-
-
-
 # ---------- Groq helper ----------
 def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resource_preference):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("GROQ_API_KEY not set")
 
-    primary  = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    primary = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     fallback = "llama-3.1-8b-instant"
 
     client = Groq(api_key=api_key)
@@ -414,8 +413,7 @@ def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resour
 
     try:
         resp = _call(primary)
-    except Exception as e1:
-        # retry once on model issues
+    except Exception:
         resp = _call(fallback)
 
     content = resp.choices[0].message.content.strip()
@@ -425,40 +423,6 @@ def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resour
     if not isinstance(data, dict) or "weeks" not in data:
         raise ValueError("Groq response missing 'weeks'")
     return data
-
-
-# # ---------- DB ----------
-# def get_db():
-#     db_path = os.path.join(APP_DIR, "users.db")
-#     conn = sqlite3.connect(db_path)
-#     conn.execute("""
-#         CREATE TABLE IF NOT EXISTS users(
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             name TEXT,
-#             email TEXT UNIQUE,
-#             password TEXT,
-#             google_id TEXT,
-#             provider TEXT,
-#             credits INTEGER DEFAULT 2
-#         )
-#     """)
-#     cols = [r[1] for r in conn.execute("PRAGMA table_info(users);").fetchall()]
-#     if "credits" not in cols:
-#         conn.execute("ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 2;")
-#         conn.commit()
-#     if "is_verified" not in cols:
-#         conn.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0;")
-#     if "otp_hash" not in cols:
-#         conn.execute("ALTER TABLE users ADD COLUMN otp_hash TEXT;")
-#     if "otp_expires_at" not in cols:
-#         conn.execute("ALTER TABLE users ADD COLUMN otp_expires_at TEXT;")
-#     conn.commit()
-#     return conn
-
-
-
-
-
 
 # ---------- Auth helpers ----------
 def login_required(f):
@@ -478,20 +442,20 @@ def get_current_user():
     cur.execute("SELECT name, email, provider, credits FROM users WHERE id=?", (uid,))
     row = cur.fetchone()
     conn.close()
-    if not row: return None
+    if not row:
+        return None
     return {"name": row[0], "email": row[1], "provider": row[2], "credits": row[3]}
 
 # ---------- Pages ----------
-# @app.route("/")
-# def home():
-#     return send_from_directory(PAGES_DIR, "home.html")
-
 @app.route("/terms")
 def terms():
     return send_from_directory(PAGES_DIR, "terms.html")
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/login", methods=["GET", "POST", "HEAD"])
 def login():
+    if request.method == "HEAD":
+        return ("", 200)
+
     if request.method == "GET":
         return send_from_directory(PAGES_DIR, "login.html")
 
@@ -582,22 +546,19 @@ def signup():
     session["pending_email"] = email
     return redirect(f"/verify?email={email}")
 
-
 # ---------- Static: CSS ----------
 @app.route("/styles/<path:filename>")
 def styles(filename):
     return send_from_directory(STYLES_DIR, filename)
 
 # ---------- Google OAuth ----------
-GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-TOKEN_URL     = "https://oauth2.googleapis.com/token"
-USERINFO_URL  = "https://openidconnect.googleapis.com/v1/userinfo"
-SCOPE         = ["openid", "email", "profile"]
-
-# REDIRECT_URI="http://127.0.0.1:5000/auth/google/callback"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+SCOPE = ["openid", "email", "profile"]
 
 def require_google_creds():
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
@@ -612,7 +573,7 @@ def verify():
         return render_template("verify.html", email=email)
 
     email = (request.form.get("email") or "").strip()
-    code  = (request.form.get("otp") or "").strip()
+    code = (request.form.get("otp") or "").strip()
     if not email or not code:
         return render_template("verify.html", email=email, error="Email and OTP are required.")
 
@@ -654,7 +615,6 @@ def verify():
     session.pop("pending_email", None)
     return redirect("/dashboard")
 
-
 @app.route("/resend-otp", methods=["POST"])
 def resend_otp():
     email = (request.form.get("email") or "").strip()
@@ -693,11 +653,11 @@ def resend_otp():
     session["pending_email"] = email
     return jsonify({"message": "OTP resent to your email."}), 200
 
-
 @app.route("/auth/google")
 def auth_google():
     err = require_google_creds()
-    if err: return err
+    if err:
+        return err
     google = OAuth2Session(GOOGLE_CLIENT_ID, scope=SCOPE, redirect_uri=REDIRECT_URI)
     authorization_url, state = google.authorization_url(
         AUTH_BASE_URL, access_type="offline", prompt="consent"
@@ -708,7 +668,8 @@ def auth_google():
 @app.route("/auth/google/callback")
 def auth_google_callback():
     err = require_google_creds()
-    if err: return err
+    if err:
+        return err
     if "oauth_state" not in session:
         return "State missing. Start again.", 400
 
@@ -721,8 +682,8 @@ def auth_google_callback():
 
     info = google.get(USERINFO_URL).json()
     email = info.get("email")
-    name  = info.get("name") or email
-    gid   = info.get("sub")
+    name = info.get("name") or email
+    gid = info.get("sub")
     if not email:
         return "Failed to get email from Google.", 400
 
@@ -745,7 +706,7 @@ def auth_google_callback():
     session["user_name"] = name
     return redirect("/dashboard")
 
-# ---------- Generate (GET form, POST -> Groq -> output.html) ----------
+# ---------- Generate ----------
 @app.route("/generate", methods=["GET", "POST"])
 @login_required
 def generate_page():
@@ -769,7 +730,10 @@ def generate_page():
     uid = session["user_id"]
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("UPDATE users SET credits = COALESCE(credits,0) - 1 WHERE id=? AND COALESCE(credits,0) > 0", (uid,))
+    cur.execute(
+        "UPDATE users SET credits = COALESCE(credits,0) - 1 WHERE id=? AND COALESCE(credits,0) > 0",
+        (uid,)
+    )
     conn.commit()
     had_credit = (cur.rowcount == 1)
     print(f"[/generate] Decrement credits for user {uid}: had_credit={had_credit}")
@@ -785,7 +749,7 @@ def generate_page():
         roadmap = call_groq_generate_roadmap(final_goal, skill, time_per_day, deadline, resource)
         print("[/generate] Groq OK. Weeks:", len(roadmap.get("weeks", [])))
     except Exception as e:
-        # Restore credit and show error to you (temporary)
+        # Restore credit on failure
         cur.execute("UPDATE users SET credits = COALESCE(credits,0) + 1 WHERE id=?", (uid,))
         conn.commit()
         conn.close()
@@ -804,7 +768,6 @@ def generate_page():
         roadmap=roadmap
     )
 
-
 # ---------- Dashboard ----------
 @app.route("/dashboard")
 @login_required
@@ -819,8 +782,9 @@ def logout():
     session.clear()
     return redirect("/")
 
+# ---------- Local dev entry ----------
 if __name__ == "__main__":
     print("Serving HTML from:", PAGES_DIR)
     print("Serving CSS  from:", STYLES_DIR)
+    # For Render use gunicorn; this is only for local dev.
     app.run(debug=True)
-
