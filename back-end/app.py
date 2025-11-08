@@ -342,7 +342,6 @@ def delete_user(user_id):
         return redirect("/admin")
 
 
-
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
     if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
         print("[email] SMTP not configured; skipping send.")
@@ -353,20 +352,13 @@ def send_email(to_email: str, subject: str, html_body: str) -> bool:
     msg["To"] = to_email
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.starttls()
+            s.starttls()   # ✅ TLS (Port 587)
             s.login(SMTP_USER, SMTP_PASS)
             s.sendmail(SMTP_FROM, [to_email], msg.as_string())
         return True
     except Exception as e:
         print("[email] FAILED:", e)
         return False
-
-def generate_otp() -> str:
-    return f"{random.randint(100000, 999999)}"
-
-def otp_expiry_iso() -> str:
-    return (datetime.utcnow() + timedelta(minutes=OTP_EXP_MINUTES)).isoformat()
-
 
 
 
@@ -604,10 +596,10 @@ def require_google_creds():
 @app.route("/verify", methods=["GET", "POST"])
 def verify():
     if request.method == "GET":
-        email = request.args.get("email") or session.get("pending_email") or ""
+        email = (request.args.get("email") or session.get("pending_email") or "").strip().lower()
         return render_template("verify.html", email=email)
 
-    email = (request.form.get("email") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
     code  = (request.form.get("otp") or "").strip()
     if not email or not code:
         return render_template("verify.html", email=email, error="Email and OTP are required.")
@@ -630,7 +622,9 @@ def verify():
         return render_template("verify.html", email=email, error="No active OTP. Please resend.")
 
     try:
-        if datetime.utcnow() > datetime.fromisoformat(otp_exp_at):
+        # handle both "YYYY-...:ss" and "YYYY-...:ssZ"
+        exp_str = otp_exp_at.rstrip("Z")
+        if datetime.utcnow() > datetime.fromisoformat(exp_str):
             conn.close()
             return render_template("verify.html", email=email, error="OTP expired. Please resend.")
     except Exception:
@@ -651,11 +645,23 @@ def verify():
     return redirect("/dashboard")
 
 
-@app.route("/resend-otp", methods=["POST"])
+
+@app.route("/resend-otp", methods=["POST", "GET"])
 def resend_otp():
-    email = (request.form.get("email") or "").strip()
+    # If someone opens it directly, bounce back to verify
+    if request.method == "GET":
+        email = (request.args.get("email") or session.get("pending_email") or "").strip().lower()
+        return redirect(f"/verify?email={email}" if email else "/verify")
+
+    # Detect whether the caller expects JSON (AJAX) or HTML (form)
+    wants_json = "application/json" in (request.headers.get("Accept") or "")
+
+    # Prefer form field, then session fallback
+    email = (request.form.get("email") or session.get("pending_email") or "").strip().lower()
     if not email:
-        return jsonify({"error": "Email is required"}), 400
+        if wants_json:
+            return jsonify({"error": "Email is required"}), 400
+        return redirect("/verify")
 
     conn = get_db()
     cur = conn.cursor()
@@ -663,12 +669,17 @@ def resend_otp():
     row = cur.fetchone()
     if not row:
         conn.close()
-        return jsonify({"error": "No account found"}), 404
+        if wants_json:
+            return jsonify({"error": "No account found"}), 404
+        return redirect(f"/verify?email={email}&err=noaccount")
     user_id, name, is_verified = row
     if int(is_verified or 0) == 1:
         conn.close()
-        return jsonify({"message": "Already verified. Please login."}), 200
+        if wants_json:
+            return jsonify({"message": "Already verified. Please login."}), 200
+        return redirect("/login")
 
+    # Create + store OTP
     otp = generate_otp()
     otp_hash = generate_password_hash(otp)
     cur.execute("UPDATE users SET otp_hash=?, otp_expires_at=? WHERE id=?",
@@ -676,6 +687,7 @@ def resend_otp():
     conn.commit()
     conn.close()
 
+    # Send email
     html = f"""
     <div style="font-family:Arial,sans-serif">
       <h2>Navona – Your new OTP</h2>
@@ -687,7 +699,12 @@ def resend_otp():
     """
     send_email(email, "Navona – Your new OTP", html)
     session["pending_email"] = email
-    return jsonify({"message": "OTP resent to your email."}), 200
+
+    # Respond based on caller type
+    if wants_json:
+        return jsonify({"message": "OTP resent to your email."}), 200
+    return redirect(f"/verify?email={email}&sent=1")
+
 
 
 @app.route("/auth/google")
