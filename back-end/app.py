@@ -8,7 +8,7 @@ import sqlite3, os, re, json, traceback
 from groq import Groq
 import smtplib, random, socket, time
 from threading import Thread
-from email.mime_text import MIMEText
+from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
