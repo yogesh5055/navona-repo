@@ -819,11 +819,28 @@ def generate_page():
     )
 
 # ---------- Dashboard ----------
-@app.route("/__smtp_test")
-def __smtp_test():
-    to = (request.args.get("to") or os.getenv("TEST_EMAIL") or SMTP_USER or SMTP_FROM)
-    ok = send_email(to, "SMTP test from Navona", "<b>If you see this, SMTP works.</b>")
-    return {"ok": ok, "to": to}, (200 if ok else 500)
+@app.route("/__smtp_diag")
+def __smtp_diag():
+    mode = (request.args.get("mode") or "").lower()  # "tls" or "ssl"
+    to = request.args.get("to")
+    if not to:
+        return {"ok": False, "error": "missing ?to=recipient@example.com"}, 400
+
+    if mode == "ssl":
+        os.environ["SMTP_USE_SSL"] = "true";  os.environ["SMTP_PORT"] = os.getenv("SMTP_PORT") or "465"
+    elif mode == "tls":
+        os.environ["SMTP_USE_SSL"] = "false"; os.environ["SMTP_PORT"] = os.getenv("SMTP_PORT") or "587"
+
+    ok = send_email(to, f"SMTP diag ({mode or 'env default'})",
+                    "<b>This is a diagnostic email from Navona.</b>")
+    return {
+        "ok": ok,
+        "mode": ("ssl" if os.getenv("SMTP_USE_SSL", "false").lower() == "true" else "tls"),
+        "host": SMTP_HOST,
+        "port": os.getenv("SMTP_PORT"),
+        "from": SMTP_FROM,
+        "to": to
+    }, (200 if ok else 500)
 
 
 
