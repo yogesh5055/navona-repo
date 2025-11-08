@@ -234,26 +234,28 @@ def admin_required(f):
 
 @app.route("/admin-login", methods=["GET", "POST"])
 def admin_login():
-    # When page is first loaded (GET)
     if request.method == "GET":
         return send_from_directory(PAGES_DIR, "admin_login.html")
 
-    # When form is submitted (POST)
     email = (request.form.get("email") or "").strip()
     password = (request.form.get("password") or "").strip()
 
-    # Fetch admin credentials from environment
-    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
-    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_pass  = os.getenv("ADMIN_PASSWORD")
 
-    # Validate credentials
-    if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+    # If env vars aren't set in hosting, fail with a clear message
+    if not admin_email or not admin_pass:
+        return render_template(
+            "admin_login.html",
+            error="Server admin credentials not configured. Ask the maintainer to set ADMIN_EMAIL and ADMIN_PASSWORD in the hosting environment."
+        )
+
+    if email == admin_email and password == admin_pass:
         session["is_admin"] = True
-        return redirect("/admin")  # Go to admin dashboard
-    else:
-        # Re-render same page with error message
-        return render_template("admin_login.html", error="Invalid email or password. Try again.")
+        session["admin_login_test"] = "ok"   # debug flag
+        return redirect("/admin")
 
+    return render_template("admin_login.html", error="Invalid email or password. Try again.")
 
 
 # ---------- Admin Routes (SQLite-safe) ----------
