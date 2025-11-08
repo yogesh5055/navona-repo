@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, request, redirect, session, jsonify, render_template
+from flask import Flask, send_from_directory, request, redirect, session, jsonify, render_template, flash
 from flask_cors import CORS
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -8,7 +8,7 @@ import sqlite3, os, re, json, traceback
 from groq import Groq
 import smtplib, random, socket, time
 from threading import Thread
-from email.mime.text import MIMEText
+from email.mime_text import MIMEText
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -147,7 +147,6 @@ def get_db():
         except NameError:
             _PG_POOL = None
         if _PG_POOL is None:
-            # Important: pass sslmode via conninfo; pool will reuse
             _PG_POOL = ConnectionPool(url, min_size=1, max_size=5, timeout=30)
             print("[DB] psycopg3 pool created with sslmode=require")
 
@@ -185,33 +184,7 @@ def get_db():
 
     # ---- SQLite fallback ----
     db_path = os.path.join(APP_DIR, "users.db")
-    conn = _sqlite3.connect(db_path, check_same_thread=False)
-    try:
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-    except Exception:
-        pass
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            email TEXT UNIQUE,
-            password TEXT,
-            google_id TEXT,
-            provider TEXT,
-            credits INTEGER DEFAULT 2,
-            is_verified INTEGER DEFAULT 0,
-            otp_hash TEXT,
-            otp_expires_at TEXT
-        )
-    """)
-    conn.commit()
-    return conn
-
-
-    # ---- SQLite fallback ----
-    db_path = os.path.join(APP_DIR, "users.db")
-    conn = _sqlite3.connect(db_path, check_same_thread=False)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
@@ -386,20 +359,39 @@ def delete_user(user_id):
 
 # ---------- Email / OTP ----------
 
-
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
+    """
+    Sends email using TLS (STARTTLS) by default or implicit SSL when SMTP_USE_SSL=true or port==465.
+    Reads port/mode from current environment to work with /__smtp_diag toggles.
+    """
+    # Pull latest values to respect /__smtp_diag adjustments without restarting
+    host = os.getenv("SMTP_HOST", SMTP_HOST or "")
+    port = int(os.getenv("SMTP_PORT", str(SMTP_PORT or 587)))
+    user = os.getenv("SMTP_USER", SMTP_USER or "")
+    pwd = os.getenv("SMTP_PASS", SMTP_PASS or "")
+    from_addr = os.getenv("SMTP_FROM", SMTP_FROM or user or "")
+
+    if not (host and port and user and pwd and from_addr):
         print("[email] SMTP not configured; skipping send.")
         return False
+
+    use_ssl = (os.getenv("SMTP_USE_SSL", "false").lower() == "true") or str(port) == "465"
+
     msg = MIMEText(html_body, "html", "utf-8")
     msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
+    msg["From"] = from_addr
     msg["To"] = to_email
+
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(SMTP_FROM, [to_email], msg.as_string())
+        if use_ssl:
+            with smtplib.SMTP_SSL(host, port) as s:
+                s.login(user, pwd)
+                s.sendmail(from_addr, [to_email], msg.as_string())
+        else:
+            with smtplib.SMTP(host, port) as s:
+                s.starttls()
+                s.login(user, pwd)
+                s.sendmail(from_addr, [to_email], msg.as_string())
         return True
     except Exception as e:
         print("[email] FAILED:", e)
@@ -411,9 +403,6 @@ def generate_otp() -> str:
 def otp_expiry_iso() -> str:
     return (datetime.utcnow() + timedelta(minutes=OTP_EXP_MINUTES)).isoformat()
 
-
-ta(minutes=OTP_EXP_MINUTES)).isoformat()
-
 def send_email_async(to_email: str, subject: str, html_body: str, otp: str = "") -> None:
     # Fire-and-forget email send; logs OTP in dev if sending fails
     def _run():
@@ -421,8 +410,6 @@ def send_email_async(to_email: str, subject: str, html_body: str, otp: str = "")
         if not ok and (os.getenv("DEV_SHOW_OTP", "false").lower() == "true") and otp:
             print(f"[DEV_ONLY_OTP] email={to_email} otp={otp}")
     Thread(target=_run, daemon=True).start()
-
-
 
 # ---------- Groq helper ----------
 def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resource_preference):
@@ -717,7 +704,6 @@ def resend_otp():
     flash("OTP resent. Check your email.")
     return redirect(f"/verify?email={email}")
 
-
 @app.route("/auth/google")
 def auth_google():
     err = require_google_creds()
@@ -836,7 +822,7 @@ def generate_page():
         roadmap=roadmap
     )
 
-# ---------- Dashboard ----------
+# ---------- Dashboard / SMTP diag ----------
 @app.route("/__smtp_diag")
 def __smtp_diag():
     mode = (request.args.get("mode") or "").lower()  # "tls" or "ssl"
@@ -845,24 +831,22 @@ def __smtp_diag():
         return {"ok": False, "error": "missing ?to=recipient@example.com"}, 400
 
     if mode == "ssl":
-        os.environ["SMTP_USE_SSL"] = "true";  os.environ["SMTP_PORT"] = os.getenv("SMTP_PORT") or "465"
+        os.environ["SMTP_USE_SSL"] = "true"
+        os.environ["SMTP_PORT"] = os.getenv("SMTP_PORT") or "465"
     elif mode == "tls":
-        os.environ["SMTP_USE_SSL"] = "false"; os.environ["SMTP_PORT"] = os.getenv("SMTP_PORT") or "587"
+        os.environ["SMTP_USE_SSL"] = "false"
+        os.environ["SMTP_PORT"] = os.getenv("SMTP_PORT") or "587"
 
     ok = send_email(to, f"SMTP diag ({mode or 'env default'})",
                     "<b>This is a diagnostic email from Navona.</b>")
     return {
         "ok": ok,
         "mode": ("ssl" if os.getenv("SMTP_USE_SSL", "false").lower() == "true" else "tls"),
-        "host": SMTP_HOST,
+        "host": os.getenv("SMTP_HOST"),
         "port": os.getenv("SMTP_PORT"),
-        "from": SMTP_FROM,
+        "from": os.getenv("SMTP_FROM"),
         "to": to
     }, (200 if ok else 500)
-
-
-
-
 
 @app.route("/dashboard")
 @login_required
