@@ -59,9 +59,11 @@
               </form>
 
               <!-- Delete -->
-              <form action="/admin/user/{{ u.id }}/delete" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this user?');">
-                <button class="btn small danger" type="submit">Delete</button>
-              </form>
+              <form action="/admin/delete-user/{{ u.id }}" method="post" style="display:inline;"
+      onsubmit="return confirm('Are you sure you want to delete this user?');">
+  <button class="btn small danger" type="submit">Delete</button>
+</form>
+
             </td>
           </tr>
           {% endfor %}
