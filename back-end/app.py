@@ -16,6 +16,11 @@ from datetime import datetime, timedelta
 # ---------- Load .env ----------
 load_dotenv()  # reads back-end/.env automatically
 
+from urllib.parse import urlparse
+db_url = os.getenv("DATABASE_URL", "")
+print("[DB] DATABASE_URL =", db_url)
+print("[DB] Host parsed  =", urlparse(db_url).hostname)
+
 REDIRECT_URI  = os.getenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:5000/auth/google/callback")
 
 SMTP_HOST = os.getenv("SMTP_HOST")
@@ -71,6 +76,9 @@ def health():
 
 
 
+
+
+
 @app.route("/")
 def home():
     return send_from_directory(FRONT_DIR, "index.html")
@@ -81,21 +89,124 @@ def index_file():
     return send_from_directory(FRONT_DIR, "index.html")
 
 
+# ---------- DB (Postgres if DATABASE_URL set; else SQLite) ----------
+def get_db():
+    import os, sqlite3
+    url = os.getenv("DATABASE_URL", "").strip()
+
+    # Normalize old scheme if present
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+
+    # ---- Postgres path ----
+    if url.startswith("postgresql://"):
+        import psycopg2
+        from psycopg2 import pool
+        from psycopg2.extensions import cursor as _PsyCursor
+
+        # Keep using SQLite-style '?' placeholders
+        class QMarkCursor(_PsyCursor):
+            def execute(self, query, vars=None):
+                if vars is not None:
+                    query = query.replace("?", "%s")
+                return super().execute(query, vars)
+            def executemany(self, query, vars_list):
+                query = query.replace("?", "%s")
+                return super().executemany(query, vars_list)
+
+        # Small global pool
+        global _PG_POOL
+        try:
+            _PG_POOL
+        except NameError:
+            _PG_POOL = None
+
+        if _PG_POOL is None:
+            _PG_POOL = pool.SimpleConnectionPool(
+                minconn=1, maxconn=5, dsn=url, cursor_factory=QMarkCursor
+            )
+            print("[DB] PostgreSQL pool created")
+
+        raw = _PG_POOL.getconn()
+
+        class _PooledConn:
+            def __init__(self, c, putback): self._c, self._putback = c, putback
+            def cursor(self):  return self._c.cursor()
+            def commit(self):  return self._c.commit()
+            def rollback(self): return self._c.rollback()
+            def close(self):   self._putback(self._c)  # return to pool
+
+        conn = _PooledConn(raw, _PG_POOL.putconn)
+
+        # Ensure schema (safe if exists)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id              SERIAL PRIMARY KEY,
+                name            TEXT,
+                email           TEXT UNIQUE,
+                password        TEXT,
+                google_id       TEXT,
+                provider        TEXT,
+                credits         INTEGER DEFAULT 2,
+                is_verified     INTEGER DEFAULT 0,
+                otp_hash        TEXT,
+                otp_expires_at  TEXT
+            );
+        """)
+        conn.commit()
+        return conn
+
+    # ---- SQLite fallback ----
+    db_path = os.path.join(APP_DIR, "users.db")
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+    except Exception:
+        pass
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT UNIQUE,
+            password TEXT,
+            google_id TEXT,
+            provider TEXT,
+            credits INTEGER DEFAULT 2,
+            is_verified INTEGER DEFAULT 0,
+            otp_hash TEXT,
+            otp_expires_at TEXT
+        )
+    """)
+    conn.commit()
+    return conn
 
 
-@app.route("/admin-login", methods=["GET", "POST"])
-def admin_login():
-    if request.method == "GET":
-        return send_from_directory(PAGES_DIR, "admin_login.html")
+from urllib.parse import urlparse
 
-    email = (request.form.get("email") or "").strip()
-    password = (request.form.get("password") or "").strip()
+@app.route("/__dbcheck")
+def __dbcheck():
+    import os, traceback
+    try:
+        url = os.getenv("DATABASE_URL", "")
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        host = urlparse(url).hostname if url else None
+        print("[DBCHECK] Using host:", host)
 
-    if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
-        session["is_admin"] = True
-        return redirect("/admin")
-    else:
-        return render_template("admin_login.html", error="Invalid credentials.")
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT 1;")
+        res = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        return {"ok": True, "db_host": host, "result": res[0]}, 200
+    except Exception as e:
+        traceback.print_exc()
+        return {"ok": False, "error": str(e)}, 500
+
 
 def admin_required(f):
     @wraps(f)
@@ -121,6 +232,27 @@ def admin_required(f):
         return redirect("/admin-login")
     return w
 
+@app.route("/admin-login", methods=["GET", "POST"])
+def admin_login():
+    # When page is first loaded (GET)
+    if request.method == "GET":
+        return send_from_directory(PAGES_DIR, "admin_login.html")
+
+    # When form is submitted (POST)
+    email = (request.form.get("email") or "").strip()
+    password = (request.form.get("password") or "").strip()
+
+    # Fetch admin credentials from environment
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
+    # Validate credentials
+    if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+        session["is_admin"] = True
+        return redirect("/admin")  # Go to admin dashboard
+    else:
+        # Re-render same page with error message
+        return render_template("admin_login.html", error="Invalid email or password. Try again.")
 
 
 
@@ -182,12 +314,30 @@ def admin_user_credits(user_id):
 @app.route("/admin/delete-user/<int:user_id>", methods=["POST"])
 @admin_required
 def delete_user(user_id):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM users WHERE id=?", (user_id,))
-    conn.commit()
-    conn.close()
-    return redirect("/admin")
+    try:
+        # Optional: allow JSON body or override id from form if you want
+        # but the path param is primary source of truth
+        override_id = request.form.get("user_id") or (request.json or {}).get("user_id") if request.is_json else None
+        target_id = int(override_id) if override_id else int(user_id)
+
+        # Safety: don't allow deleting yourself (optional)
+        if session.get("user_id") == target_id:
+            print(f"[admin] Prevented self-delete: user {target_id}")
+            return redirect("/admin")
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM users WHERE id=?", (target_id,))
+        deleted = cur.rowcount or 0
+        conn.commit()
+        conn.close()
+
+        print(f"[admin] Delete user id={target_id}, affected={deleted}")
+        return redirect("/admin")
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        # Avoid leaking details to the UI; log is enough
+        return redirect("/admin")
 
 
 
@@ -300,85 +450,6 @@ def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resour
 #     return conn
 
 
-def get_db():
-    """
-    Returns a DB connection.
-    - If DATABASE_URL is set (Render Postgres), use psycopg2 and accept '?' style placeholders.
-    - Otherwise use local SQLite at back-end/users.db (your current behavior).
-    Also ensures the 'users' table exists on both engines.
-    """
-    url = os.getenv("DATABASE_URL", "").strip()
-
-    if url.startswith("postgres://") or url.startswith("postgresql://"):
-        import psycopg2
-        from psycopg2.extensions import cursor as _PsyCursor
-
-        # Cursor that lets you keep using SQLite-style '?' placeholders
-        class QMarkCursor(_PsyCursor):
-            def execute(self, query, vars=None):
-                if vars is not None:
-                    query = query.replace("?", "%s")
-                return super().execute(query, vars)
-
-            def executemany(self, query, vars_list):
-                query = query.replace("?", "%s")
-                return super().executemany(query, vars_list)
-
-        conn = psycopg2.connect(url, cursor_factory=QMarkCursor)
-        cur = conn.cursor()
-
-        # Postgres schema (AUTOINCREMENT -> SERIAL/IDENTITY)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id              SERIAL PRIMARY KEY,
-                name            TEXT,
-                email           TEXT UNIQUE,
-                password        TEXT,
-                google_id       TEXT,
-                provider        TEXT,
-                credits         INTEGER DEFAULT 2,
-                is_verified     INTEGER DEFAULT 0,
-                otp_hash        TEXT,
-                otp_expires_at  TEXT
-            );
-        """)
-        # Make sure columns exist (safe if already present)
-        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 2;")
-        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified INTEGER DEFAULT 0;")
-        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_hash TEXT;")
-        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires_at TEXT;")
-        conn.commit()
-        return conn
-
-    # ---- SQLite (local / fallback) ----
-    db_path = os.path.join(APP_DIR, "users.db")
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            email TEXT UNIQUE,
-            password TEXT,
-            google_id TEXT,
-            provider TEXT,
-            credits INTEGER DEFAULT 2,
-            is_verified INTEGER DEFAULT 0,
-            otp_hash TEXT,
-            otp_expires_at TEXT
-        )
-    """)
-    # keep your existing migrations
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(users);").fetchall()]
-    if "credits" not in cols:
-        conn.execute("ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 2;")
-    if "is_verified" not in cols:
-        conn.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0;")
-    if "otp_hash" not in cols:
-        conn.execute("ALTER TABLE users ADD COLUMN otp_hash TEXT;")
-    if "otp_expires_at" not in cols:
-        conn.execute("ALTER TABLE users ADD COLUMN otp_expires_at TEXT;")
-    conn.commit()
-    return conn
 
 
 
@@ -746,5 +817,4 @@ if __name__ == "__main__":
     print("Serving HTML from:", PAGES_DIR)
     print("Serving CSS  from:", STYLES_DIR)
     app.run(debug=True)
-
 
