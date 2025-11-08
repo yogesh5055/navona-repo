@@ -362,9 +362,9 @@ def delete_user(user_id):
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
     """
     Sends email using TLS (STARTTLS) by default or implicit SSL when SMTP_USE_SSL=true or port==465.
-    Reads port/mode from current environment to work with /__smtp_diag toggles.
+    Includes debug logs of the SMTP handshake when using STARTTLS to help diagnose issues.
     """
-    # Pull latest values to respect /__smtp_diag adjustments without restarting
+    # Pull latest env each time
     host = os.getenv("SMTP_HOST", SMTP_HOST or "")
     port = int(os.getenv("SMTP_PORT", str(SMTP_PORT or 587)))
     user = os.getenv("SMTP_USER", SMTP_USER or "")
@@ -383,19 +383,22 @@ def send_email(to_email: str, subject: str, html_body: str) -> bool:
     msg["To"] = to_email
 
     try:
+        print(f"[email] connecting to {host}:{port} ssl={use_ssl}")
         if use_ssl:
-            with smtplib.SMTP_SSL(host, port) as s:
-                s.login(user, pwd)
-                s.sendmail(from_addr, [to_email], msg.as_string())
+            s = smtplib.SMTP_SSL(host, port)
         else:
-            with smtplib.SMTP(host, port) as s:
-                s.starttls()
-                s.login(user, pwd)
-                s.sendmail(from_addr, [to_email], msg.as_string())
+            s = smtplib.SMTP(host, port)
+            s.set_debuglevel(1)  # full SMTP log
+            s.starttls()
+        s.login(user, pwd)
+        s.sendmail(from_addr, [to_email], msg.as_string())
+        s.quit()
+        print("[email] sent OK")
         return True
     except Exception as e:
         print("[email] FAILED:", e)
         return False
+
 
 def generate_otp() -> str:
     return f"{random.randint(100000, 999999)}"
