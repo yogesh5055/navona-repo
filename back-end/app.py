@@ -6,9 +6,12 @@ from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
 import sqlite3, os, re, json
 from groq import Groq
-import smtplib, random 
-from email.mime.text import MIMEText  # (some environments prefer this exact path)
+import smtplib, random
+from email.mime.text import MIMEText
 from datetime import datetime, timedelta
+# from werkzeug.security import generate_password_hash, check_password_hash
+
+
 
 # ---------- Load .env ----------
 load_dotenv()  # reads back-end/.env automatically
@@ -20,7 +23,6 @@ print("[DB] Host parsed  =", urlparse(db_url).hostname)
 
 REDIRECT_URI  = os.getenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:5000/auth/google/callback")
 
-# Module-level defaults (used by some code paths), but send_email now re-reads each call
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
@@ -28,8 +30,12 @@ SMTP_PASS = os.getenv("SMTP_PASS")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "")
 OTP_EXP_MINUTES = int(os.getenv("OTP_EXP_MINUTES", "10"))
 
+
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@navona.ai")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Navona@123")
+
+
+
 
 # ---------- Paths ----------
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +46,7 @@ STYLES_DIR = os.path.join(BASE_DIR, "front-end", "styles")
 FRONT_DIR = os.path.join(BASE_DIR, "front-end")
 print("FRONT_DIR exists?", os.path.exists(FRONT_DIR))
 print("index.html exists?", os.path.exists(os.path.join(FRONT_DIR, "index.html")))
+
 
 # templates= PAGES_DIR so we can keep Jinja pages there
 app = Flask(__name__, static_folder=PAGES_DIR, static_url_path="", template_folder=PAGES_DIR)
@@ -62,9 +69,15 @@ except Exception as e:
     print("EXC STR :", str(e))
     traceback.print_exc()
 
+
 @app.route("/health")
 def health():
     return {"status": "ok"}, 200
+
+
+
+
+
 
 @app.route("/")
 def home():
@@ -75,12 +88,6 @@ def home():
 def index_file():
     return send_from_directory(FRONT_DIR, "index.html")
 
-# ---------- Helper: are we using Postgres? ----------
-def using_postgres() -> bool:
-    url = (os.getenv("DATABASE_URL", "") or "").strip()
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
-    return url.startswith("postgresql://")
 
 # ---------- DB (Postgres if DATABASE_URL set; else SQLite) ----------
 def get_db():
@@ -175,6 +182,7 @@ def get_db():
     conn.commit()
     return conn
 
+
 from urllib.parse import urlparse
 
 @app.route("/__dbcheck")
@@ -198,6 +206,7 @@ def __dbcheck():
     except Exception as e:
         traceback.print_exc()
         return {"ok": False, "error": str(e)}, 500
+
 
 def admin_required(f):
     @wraps(f)
@@ -248,6 +257,7 @@ def admin_login():
 
     return render_template("admin_login.html", error="Invalid email or password. Try again.")
 
+
 # ---------- Admin Routes (SQLite-safe) ----------
 @app.route("/admin")
 @admin_required
@@ -276,6 +286,7 @@ def admin_dashboard():
     ]
     return render_template("admin.html", users=users_list)
 
+
 # Increment / decrement credits by a posted delta ("+1" or "-1")
 @app.route("/admin/user/<int:user_id>/credits", methods=["POST"])
 @admin_required
@@ -301,10 +312,13 @@ def admin_user_credits(user_id):
     conn.close()
     return redirect("/admin")
 
+
 @app.route("/admin/delete-user/<int:user_id>", methods=["POST"])
 @admin_required
 def delete_user(user_id):
     try:
+        # Optional: allow JSON body or override id from form if you want
+        # but the path param is primary source of truth
         override_id = request.form.get("user_id") or (request.json or {}).get("user_id") if request.is_json else None
         target_id = int(override_id) if override_id else int(user_id)
 
@@ -324,61 +338,27 @@ def delete_user(user_id):
         return redirect("/admin")
     except Exception as e:
         import traceback; traceback.print_exc()
+        # Avoid leaking details to the UI; log is enough
         return redirect("/admin")
 
-# ---------- Email helpers ----------
+
+
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """
-    Robust email sender that re-reads SMTP_* from env each call.
-    Supports TLS (587) and SSL (465) via SMTP_USE_SSL.
-    """
-    import os, time, ssl, socket, smtplib, traceback
-    from email.mime.text import MIMEText
-
-    host = (os.getenv("SMTP_HOST") or "").strip()
-    port = int(os.getenv("SMTP_PORT", "587"))
-    user = (os.getenv("SMTP_USER") or "").strip()
-    password = (os.getenv("SMTP_PASS") or "").strip()
-    from_addr = (os.getenv("SMTP_FROM") or user).strip()
-    use_ssl = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
-    debug_on = os.getenv("SMTP_DEBUG", "false").lower() == "true"
-
-    if not host or not from_addr:
-        print("[email] ERROR: SMTP_HOST or SMTP_FROM missing")
+    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
+        print("[email] SMTP not configured; skipping send.")
         return False
-
-    msg = MIMEText(html_body or "", "html", "utf-8")
-    msg["Subject"] = subject or ""
-    msg["From"] = from_addr
+    msg = MIMEText(html_body, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
     msg["To"] = to_email
-
     try:
-        if use_ssl:
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(host, port, timeout=20, context=context) as s:
-                if debug_on: s.set_debuglevel(1)
-                s.ehlo()
-                if user and password:
-                    s.login(user, password)
-                s.sendmail(from_addr, [to_email], msg.as_string())
-        else:
-            context = ssl.create_default_context()
-            with smtplib.SMTP(host, port, timeout=20) as s:
-                if debug_on: s.set_debuglevel(1)
-                s.ehlo()
-                s.starttls(context=context)
-                s.ehlo()
-                if user and password:
-                    s.login(user, password)
-                s.sendmail(from_addr, [to_email], msg.as_string())
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            s.starttls()
+            s.login(SMTP_USER, SMTP_PASS)
+            s.sendmail(SMTP_FROM, [to_email], msg.as_string())
         return True
-    except smtplib.SMTPResponseException as e:
-        print(f"[email] FAILED SMTP code={e.smtp_code} msg={e.smtp_error!r}")
-        traceback.print_exc()
-        return False
-    except (smtplib.SMTPException, socket.timeout, OSError) as e:
-        print("[email] FAILED:", repr(e))
-        traceback.print_exc()
+    except Exception as e:
+        print("[email] FAILED:", e)
         return False
 
 def generate_otp() -> str:
@@ -386,6 +366,11 @@ def generate_otp() -> str:
 
 def otp_expiry_iso() -> str:
     return (datetime.utcnow() + timedelta(minutes=OTP_EXP_MINUTES)).isoformat()
+
+
+
+
+
 
 # ---------- Groq helper ----------
 def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resource_preference):
@@ -425,7 +410,8 @@ def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resour
 
     try:
         resp = _call(primary)
-    except Exception:
+    except Exception as e1:
+        # retry once on model issues
         resp = _call(fallback)
 
     content = resp.choices[0].message.content.strip()
@@ -435,6 +421,40 @@ def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resour
     if not isinstance(data, dict) or "weeks" not in data:
         raise ValueError("Groq response missing 'weeks'")
     return data
+
+
+# # ---------- DB ----------
+# def get_db():
+#     db_path = os.path.join(APP_DIR, "users.db")
+#     conn = sqlite3.connect(db_path)
+#     conn.execute("""
+#         CREATE TABLE IF NOT EXISTS users(
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             name TEXT,
+#             email TEXT UNIQUE,
+#             password TEXT,
+#             google_id TEXT,
+#             provider TEXT,
+#             credits INTEGER DEFAULT 2
+#         )
+#     """)
+#     cols = [r[1] for r in conn.execute("PRAGMA table_info(users);").fetchall()]
+#     if "credits" not in cols:
+#         conn.execute("ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 2;")
+#         conn.commit()
+#     if "is_verified" not in cols:
+#         conn.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0;")
+#     if "otp_hash" not in cols:
+#         conn.execute("ALTER TABLE users ADD COLUMN otp_hash TEXT;")
+#     if "otp_expires_at" not in cols:
+#         conn.execute("ALTER TABLE users ADD COLUMN otp_expires_at TEXT;")
+#     conn.commit()
+#     return conn
+
+
+
+
+
 
 # ---------- Auth helpers ----------
 def login_required(f):
@@ -458,6 +478,10 @@ def get_current_user():
     return {"name": row[0], "email": row[1], "provider": row[2], "credits": row[3]}
 
 # ---------- Pages ----------
+# @app.route("/")
+# def home():
+#     return send_from_directory(PAGES_DIR, "home.html")
+
 @app.route("/terms")
 def terms():
     return send_from_directory(PAGES_DIR, "terms.html")
@@ -518,22 +542,14 @@ def signup():
         conn.close()
         return jsonify({"error": "Email already registered"}), 409
 
-    # create user (unverified) — handle Postgres/SQLite id return
+    # create user (unverified)
     hashed = generate_password_hash(password)
-    if using_postgres():
-        cur.execute(
-            "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?) RETURNING id",
-            (name, email, hashed, "local", 2, 0)
-        )
-        user_id = cur.fetchone()[0]
-        conn.commit()
-    else:
-        cur.execute(
-            "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?)",
-            (name, email, hashed, "local", 2, 0)
-        )
-        conn.commit()
-        user_id = cur.lastrowid
+    cur.execute(
+        "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?)",
+        (name, email, hashed, "local", 2, 0)
+    )
+    conn.commit()
+    user_id = cur.lastrowid
 
     # generate + store OTP (UPDATE existing row — do NOT insert again)
     otp = generate_otp()
@@ -562,6 +578,7 @@ def signup():
     session["pending_email"] = email
     return redirect(f"/verify?email={email}")
 
+
 # ---------- Static: CSS ----------
 @app.route("/styles/<path:filename>")
 def styles(filename):
@@ -575,6 +592,8 @@ AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL     = "https://oauth2.googleapis.com/token"
 USERINFO_URL  = "https://openidconnect.googleapis.com/v1/userinfo"
 SCOPE         = ["openid", "email", "profile"]
+
+# REDIRECT_URI="http://127.0.0.1:5000/auth/google/callback"
 
 def require_google_creds():
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
@@ -631,6 +650,7 @@ def verify():
     session.pop("pending_email", None)
     return redirect("/dashboard")
 
+
 @app.route("/resend-otp", methods=["POST"])
 def resend_otp():
     email = (request.form.get("email") or "").strip()
@@ -669,6 +689,7 @@ def resend_otp():
     session["pending_email"] = email
     return jsonify({"message": "OTP resent to your email."}), 200
 
+
 @app.route("/auth/google")
 def auth_google():
     err = require_google_creds()
@@ -706,20 +727,12 @@ def auth_google_callback():
     cur.execute("SELECT id FROM users WHERE email=?", (email,))
     row = cur.fetchone()
     if not row:
-        if using_postgres():
-            cur.execute(
-                "INSERT INTO users (name,email,google_id,provider,credits) VALUES (?,?,?,?,?) RETURNING id",
-                (name, email, gid, "google", 2)
-            )
-            user_id = cur.fetchone()[0]
-            conn.commit()
-        else:
-            cur.execute(
-                "INSERT INTO users (name,email,google_id,provider,credits) VALUES (?,?,?,?,?)",
-                (name, email, gid, "google", 2)
-            )
-            conn.commit()
-            user_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO users (name,email,google_id,provider,credits) VALUES (?,?,?,?,?)",
+            (name, email, gid, "google", 2)
+        )
+        conn.commit()
+        user_id = cur.lastrowid
     else:
         user_id = row[0]
     conn.close()
@@ -787,6 +800,7 @@ def generate_page():
         roadmap=roadmap
     )
 
+
 # ---------- Dashboard ----------
 @app.route("/dashboard")
 @login_required
@@ -804,4 +818,4 @@ def logout():
 if __name__ == "__main__":
     print("Serving HTML from:", PAGES_DIR)
     print("Serving CSS  from:", STYLES_DIR)
-    app.run(debug=True)
+    app.run(debug=False)
