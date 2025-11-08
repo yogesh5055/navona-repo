@@ -387,34 +387,32 @@ def delete_user(user_id):
 # ---------- Email / OTP ----------
 
 
-import resend
-import os
-
-resend.api_key = os.getenv("RESEND_API_KEY")
-
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
+    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
+        print("[email] SMTP not configured; skipping send.")
+        return False
+    msg = MIMEText(html_body, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = to_email
     try:
-        params = {
-            "from": os.getenv("RESEND_FROM", "Navona <navona@resend.dev>"),
-            "to": [to_email],
-            "subject": subject,
-            "html": html_body
-        }
-        resend.Emails.send(params)
-        print("[email] Sent via Resend ✅")
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            s.starttls()
+            s.login(SMTP_USER, SMTP_PASS)
+            s.sendmail(SMTP_FROM, [to_email], msg.as_string())
         return True
     except Exception as e:
-        print("[email] FAILED ❌", e)
+        print("[email] FAILED:", e)
         return False
 
-# ---------- OTP helpers (add below send_email) ----------
 def generate_otp() -> str:
-    # 6-digit numeric OTP
     return f"{random.randint(100000, 999999)}"
 
 def otp_expiry_iso() -> str:
-    # UTC ISO timestamp for expiry
     return (datetime.utcnow() + timedelta(minutes=OTP_EXP_MINUTES)).isoformat()
+
+
+ta(minutes=OTP_EXP_MINUTES)).isoformat()
 
 def send_email_async(to_email: str, subject: str, html_body: str, otp: str = "") -> None:
     # Fire-and-forget email send; logs OTP in dev if sending fails
@@ -716,7 +714,9 @@ def resend_otp():
     send_email_async(email, "Navona – Your new OTP", html, otp=otp)
 
     session["pending_email"] = email
-    return jsonify({"message": "OTP resent to your email."}), 200
+    flash("OTP resent. Check your email.")
+    return redirect(f"/verify?email={email}")
+
 
 @app.route("/auth/google")
 def auth_google():
