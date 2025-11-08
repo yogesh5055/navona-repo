@@ -92,6 +92,13 @@ def icon_jpg():
         return send_from_directory(FRONT_DIR, "icon.jpg")
     return ("", 204)
 
+# ---------- Helper: are we using Postgres? ----------
+def using_postgres() -> bool:
+    url = (os.getenv("DATABASE_URL", "") or "").strip()
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url.startswith("postgresql://")
+
 # ---------- DB (Postgres if DATABASE_URL set; else SQLite) ----------
 def get_db():
     import os as _os, sqlite3 as _sqlite3
@@ -512,12 +519,22 @@ def signup():
 
     # create user (unverified)
     hashed = generate_password_hash(password)
-    cur.execute(
-        "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?)",
-        (name, email, hashed, "local", 2, 0)
-    )
+    if using_postgres():
+        # Postgres (psycopg3): get id via RETURNING
+        cur.execute(
+            "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?) RETURNING id",
+            (name, email, hashed, "local", 2, 0)
+        )
+        user_id = cur.fetchone()[0]
+    else:
+        # SQLite
+        cur.execute(
+            "INSERT INTO users (name,email,password,provider,credits,is_verified) VALUES (?,?,?,?,?,?)",
+            (name, email, hashed, "local", 2, 0)
+        )
+        user_id = cur.lastrowid
+
     conn.commit()
-    user_id = cur.lastrowid
 
     # generate + store OTP (UPDATE existing row — do NOT insert again)
     otp = generate_otp()
@@ -692,12 +709,19 @@ def auth_google_callback():
     cur.execute("SELECT id FROM users WHERE email=?", (email,))
     row = cur.fetchone()
     if not row:
-        cur.execute(
-            "INSERT INTO users (name,email,google_id,provider,credits) VALUES (?,?,?,?,?)",
-            (name, email, gid, "google", 2)
-        )
+        if using_postgres():
+            cur.execute(
+                "INSERT INTO users (name,email,google_id,provider,credits) VALUES (?,?,?,?,?) RETURNING id",
+                (name, email, gid, "google", 2)
+            )
+            user_id = cur.fetchone()[0]
+        else:
+            cur.execute(
+                "INSERT INTO users (name,email,google_id,provider,credits) VALUES (?,?,?,?,?)",
+                (name, email, gid, "google", 2)
+            )
+            user_id = cur.lastrowid
         conn.commit()
-        user_id = cur.lastrowid
     else:
         user_id = row[0]
     conn.close()
