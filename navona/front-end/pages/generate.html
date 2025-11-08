@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Navona | Generate Roadmap</title>
+  <link class="icon" rel="icon" href="icon.jpg">
+  <link rel="stylesheet" href="/styles/generate.css" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="/dashboard" class="logo">Navona</a>
+    <form action="/logout" method="post" style="margin:0;">
+      <button type="submit" class="logout-btn">Logout</button>
+    </form>
+  </header>
+
+  <main class="gen-wrap">
+    <section class="gen-card">
+      <h1>Generate Your Custom Roadmap 🚀</h1>
+      <p class="sub">Fill these details and we’ll craft a plan for you.</p>
+
+      <form action="/generate" method="post" class="gen-form">
+        <div class="group">
+          <label for="goal">Your Goal</label>
+          <select id="goal" name="goal" required>
+            <option value="">Select Your Goal</option>
+            <option>Data Scientist</option>
+            <option>Full Stack Developer</option>
+            <option>AI Engineer</option>
+            <option>Cyber Security Expert</option>
+            <option>Web Developer</option>
+            <option>Blockchain Developer</option>
+            <option>Other</option>
+          </select>
+          <small class="hint">If you choose “Other”, type it below.</small>
+          <input type="text" id="customGoal" name="customGoal" placeholder="Custom goal (optional)">
+        </div>
+
+        <div class="group">
+          <label for="skill">Skill Level</label>
+          <select id="skill" name="skill_level" required>
+            <option value="">Select Skill Level</option>
+            <option>Beginner</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+        </div>
+
+        <div class="group">
+          <label for="time">Daily Study Time</label>
+          <select id="time" name="time_per_day" required>
+            <option value="">Select Time</option>
+            <option>1 Hour</option>
+            <option>2 Hours</option>
+            <option>4 Hours</option>
+            <option>Full Time</option>
+          </select>
+        </div>
+
+        <div class="group">
+          <label for="deadline">Target Timeline</label>
+          <select id="deadline" name="deadline" required>
+            <option value="">Select Deadline</option>
+            <option>3 Months</option>
+            <option>6 Months</option>
+            <option>1 Year</option>
+            <option>No Deadline</option>
+          </select>
+        </div>
+
+        <div class="group">
+          <label for="resource">Resource Preference</label>
+          <select id="resource" name="resource_preference" required>
+            <option value="">Select Resource Preference</option>
+            <option>YouTube Videos</option>
+            <option>Online Courses</option>
+            <option>Books</option>
+            <option>Projects & Hands-on Labs</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <a href="/dashboard" class="btn secondary">← Back</a>
+          <button type="submit" class="btn primary">Generate Roadmap</button>
+        </div>
+
+        <p class="note">
+          Tip: If “Goal” is set to <b>Other</b>, the server will use your “Custom goal” value.
+        </p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2025 Navona. All rights reserved.</p>
+  </footer>
+</body>
+</html>

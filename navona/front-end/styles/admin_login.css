@@ -1,0 +1,139 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+/* RESET */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* BODY */
+body {
+  font-family: 'Poppins', sans-serif;
+  background: linear-gradient(135deg, #0078ff, #00b4d8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  color: #333;
+}
+
+/* CONTAINER */
+.auth-container {
+  width: 100%;
+  max-width: 440px;
+}
+
+/* CARD */
+.auth-card {
+  background: #ffffff;
+  padding: 2.2rem;
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  animation: fadeIn 0.5s ease;
+}
+
+.auth-card h1 {
+  color: #0078ff;
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.auth-card p {
+  color: #555;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ERROR */
+.error {
+  background: #ffeaea;
+  color: #b42318;
+  border: 1px solid #ffb3ad;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+/* FORM */
+label {
+  display: block;
+  text-align: left;
+  font-weight: 500;
+  margin: 0.5rem 0 0.35rem;
+  color: #222;
+  font-size: 0.9rem;
+}
+
+input[type="email"],
+input[type="password"] {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 25px;
+  font-size: 0.95rem;
+  transition: 0.25s ease;
+  margin-bottom: 1rem;
+}
+
+input:focus {
+  border-color: #0078ff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 120, 255, 0.15);
+}
+
+/* BUTTON */
+.btn {
+  display: inline-block;
+  width: 100%;
+  border: none;
+  border-radius: 25px;
+  padding: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-size: 1rem;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, #0078ff, #00b4d8);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: linear-gradient(135deg, #0068e5, #00a0c9);
+  transform: translateY(-2px);
+}
+
+/* FOOTER NOTE */
+.note {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: #777;
+}
+
+/* ANIMATION */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* RESPONSIVE */
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 1.6rem;
+  }
+  .auth-card h1 {
+    font-size: 1.6rem;
+  }
+}

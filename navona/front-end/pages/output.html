@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Navona | Roadmap Output</title>
+  <link rel="stylesheet" href="/styles/output.css" />
+ <link class="icon" rel="icon" href="icon.jpg">
+</head>
+<body>
+  <header class="navbar">
+    <a href="/dashboard" class="logo">Navona</a>
+    <form action="/logout" method="post" style="margin:0;">
+      <button type="submit" class="logout-btn">Logout</button>
+    </form>
+  </header>
+
+  {# -------- Macro: make a link for each resource -------- #}
+  {% macro resource_link(text, pref) -%}
+    {%- set q = text|urlencode -%}
+    {%- if text.startswith('http') -%}
+      <a href="{{ text }}" target="_blank" rel="noopener">{{ text }}</a>
+    {%- elif pref == 'YouTube Videos' -%}
+      <a href="https://www.youtube.com/results?search_query={{ q }}" target="_blank" rel="noopener">{{ text }}</a>
+    {%- elif pref == 'Online Courses' -%}
+      <a href="https://www.google.com/search?q={{ q }}+course+site:coursera.org+OR+site:udemy.com+OR+site:edx.org" target="_blank" rel="noopener">{{ text }}</a>
+    {%- elif pref == 'Books' -%}
+      <a href="https://www.google.com/search?tbm=bks&q={{ q }}" target="_blank" rel="noopener">{{ text }}</a>
+    {%- elif pref == 'Projects & Hands-on Labs' -%}
+      <a href="https://www.google.com/search?q={{ q }}+project+site:github.com+OR+site:learn.microsoft.com+OR+site:lab.github.com" target="_blank" rel="noopener">{{ text }}</a>
+    {%- else -%}
+      <a href="https://www.google.com/search?q={{ q }}" target="_blank" rel="noopener">{{ text }}</a>
+    {%- endif -%}
+  {%- endmacro %}
+
+  <main class="out-wrap">
+    <section class="out-card">
+      <h1>🎯 Your Custom Roadmap</h1>
+
+      <div class="meta">
+        <p><strong>Goal:</strong> {{ goal }}</p>
+        <p><strong>Level:</strong> {{ skill }}</p>
+        <p><strong>Time/Day:</strong> {{ time_per_day }}</p>
+        <p><strong>Deadline:</strong> {{ deadline }}</p>
+        <p><strong>Preference:</strong> {{ resource_preference }}</p>
+      </div>
+
+      {% if roadmap.weeks and roadmap.weeks|length > 0 %}
+      <div class="weeks">
+        {% for w in roadmap.weeks %}
+        <article class="week">
+          <h2>📆 Week {{ w.week }}</h2>
+
+          {% if w.topics %}
+            <h3>📖 Topics</h3>
+            <ul>
+              {% for t in w.topics %}
+                <li>{{ t }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {% if w.resources %}
+            <h3>📚 Resources</h3>
+            <ul>
+              {% for r in w.resources %}
+                <li>{{ resource_link(r, resource_preference) | safe }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+        <p class="empty">No roadmap data available. Please try again.</p>
+      {% endif %}
+
+      <div class="actions">
+        <a class="btn secondary" href="/dashboard">← Back</a>
+        <a class="btn primary" href="/download-pdf">📥 Download PDF</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2025 Navona. All rights reserved.</p>
+  </footer>
+</body>
+</html>
