@@ -6,8 +6,7 @@ from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
 import sqlite3, os, re, json
 from groq import Groq
-import smtplib, random
-from email.mime_text import MIMEText  # NOTE: keep the import name consistent
+import smtplib, random 
 from email.mime.text import MIMEText  # (some environments prefer this exact path)
 from datetime import datetime, timedelta
 
