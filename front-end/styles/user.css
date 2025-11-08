@@ -1,0 +1,210 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
+
+/* RESET */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* BODY */
+body {
+  font-family: 'Poppins', sans-serif;
+  background: linear-gradient(135deg, #0078ff, #00b4d8);
+  color: #333;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------- NAVBAR ---------------- */
+.navbar {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #0078ff;
+  letter-spacing: 0.5px;
+}
+
+/* Logout Button */
+.logout-btn {
+  background: linear-gradient(135deg, #0078ff, #00b4d8);
+  color: #fff;
+  padding: 0.55rem 1.2rem;
+  border-radius: 25px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 3px 10px rgba(0, 120, 255, 0.25);
+}
+
+.logout-btn:hover {
+  background: linear-gradient(135deg, #0066ff, #009ed8);
+  transform: translateY(-2px);
+}
+
+/* ---------------- DASHBOARD MAIN ---------------- */
+.dashboard {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  padding: 2rem;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+.card h2 {
+  color: #0078ff;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.card p {
+  margin-bottom: 1.5rem;
+  color: #444;
+  font-size: 1rem;
+}
+
+.credits {
+  color: #00b4d8;
+  font-weight: 600;
+}
+
+/* ---------------- BUTTONS ---------------- */
+.btn {
+  display: inline-block;
+  text-decoration: none;
+  padding: 0.75rem 1.8rem;
+  border-radius: 25px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  margin: 0.5rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+/* Primary (blue gradient) */
+.btn.primary {
+  background: linear-gradient(135deg, #0078ff, #00b4d8);
+  color: #fff;
+  border: none;
+}
+
+.btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 10px rgba(0, 120, 255, 0.25);
+}
+
+/* Secondary (outline) */
+.btn.secondary {
+  background: #fff;
+  border: 2px solid #0078ff;
+  color: #0078ff;
+}
+
+.btn.secondary:hover {
+  background: #f1f7ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 120, 255, 0.25);
+}
+
+/* ---------------- DISABLED STATE ---------------- */
+.btn.disabled,
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+  transform: none;
+  background: #b5b5b5;
+  color: #f1f1f1;
+}
+
+/* Ensure hover doesn’t re-activate disabled button */
+.btn.primary.disabled:hover,
+.btn.primary[disabled]:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+/* ---------------- NOTICE BOX ---------------- */
+.notice {
+  background: #f5f8ff;
+  border: 1px solid #dbe8ff;
+  border-radius: 12px;
+  padding: 0.75rem;
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+/* ---------------- FOOTER ---------------- */
+.footer {
+  text-align: center;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: #555;
+  font-size: 0.85rem;
+  border-top: 1px solid #eee;
+}
+
+/* ---------------- ANIMATION ---------------- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------------- RESPONSIVE ---------------- */
+@media (max-width: 600px) {
+  .navbar {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .logout-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .dashboard {
+    padding: 1rem;
+  }
+
+  .card {
+    width: 90%;
+    padding: 1.5rem;
+  }
+
+  .btn {
+    display: block;
+    width: 100%;
+    margin: 0.5rem 0;
+  }
+}
