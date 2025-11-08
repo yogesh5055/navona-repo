@@ -355,36 +355,34 @@ def delete_user(user_id):
         return redirect("/admin")
 
 # ---------- Email / OTP ----------
+import ssl  # at top with other imports
+
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """
-    SMTP send with sensible timeouts. Supports STARTTLS: SMTP_PORT=587 (default),
-    or SMTPS when SMTP_USE_SSL=true with port 465. Returns True/False quickly.
-    """
-    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
-        print("[email] SMTP not configured; skipping send.")
-        return False
-
-    msg = MIMEText(html_body, "html", "utf-8")
-    msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
-    msg["To"] = to_email
-
+    ...
     use_ssl = (os.getenv("SMTP_USE_SSL", "false").lower() == "true")
+    debug_on = (os.getenv("SMTP_DEBUG", "false").lower() == "true")
 
     t0 = time.time()
     try:
         if use_ssl:
-            with smtplib.SMTP_SSL(SMTP_HOST, int(SMTP_PORT), timeout=10) as s:
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(SMTP_HOST, int(SMTP_PORT), timeout=10, context=context) as s:
+                if debug_on: s.set_debuglevel(1)
                 t_conn = time.time()
+                s.ehlo()
                 s.login(SMTP_USER, SMTP_PASS)
                 t_auth = time.time()
                 s.sendmail(SMTP_FROM, [to_email], msg.as_string())
                 t_send = time.time()
         else:
+            context = ssl.create_default_context()
             with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT), timeout=10) as s:
+                if debug_on: s.set_debuglevel(1)
                 t_conn = time.time()
-                s.starttls()
+                s.ehlo()
+                s.starttls(context=context)
                 t_tls = time.time()
+                s.ehlo()
                 s.login(SMTP_USER, SMTP_PASS)
                 t_auth = time.time()
                 s.sendmail(SMTP_FROM, [to_email], msg.as_string())
@@ -392,9 +390,10 @@ def send_email(to_email: str, subject: str, html_body: str) -> bool:
                 print(f"[email] timings: connect={(t_conn-t0):.3f}s  tls={(t_tls-t_conn):.3f}s  "
                       f"auth={(t_auth-t_tls):.3f}s  send={(t_send-t_auth):.3f}s  total={(t_send-t0):.3f}s")
         return True
-    except (socket.timeout, smtplib.SMTPException, OSError) as e:
+    except (socket.timeout, smtplib.SMTPResponseException, smtplib.SMTPException, OSError) as e:
         print("[email] FAILED:", e)
         return False
+
 
 def send_email_async(to_email: str, subject: str, html_body: str, otp: str = "") -> None:
     def _run():
