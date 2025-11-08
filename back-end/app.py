@@ -819,6 +819,16 @@ def generate_page():
     )
 
 # ---------- Dashboard ----------
+@app.route("/__smtp_test")
+def __smtp_test():
+    to = (request.args.get("to") or os.getenv("TEST_EMAIL") or SMTP_USER or SMTP_FROM)
+    ok = send_email(to, "SMTP test from Navona", "<b>If you see this, SMTP works.</b>")
+    return {"ok": ok, "to": to}, (200 if ok else 500)
+
+
+
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
