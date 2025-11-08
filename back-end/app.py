@@ -355,58 +355,46 @@ def delete_user(user_id):
         return redirect("/admin")
 
 # ---------- Email / OTP ----------
-import ssl  # at top with other imports
+
+
+import resend
+import os
+
+resend.api_key = os.getenv("RESEND_API_KEY")
 
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    ...
-    use_ssl = (os.getenv("SMTP_USE_SSL", "false").lower() == "true")
-    debug_on = (os.getenv("SMTP_DEBUG", "false").lower() == "true")
-
-    t0 = time.time()
     try:
-        if use_ssl:
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(SMTP_HOST, int(SMTP_PORT), timeout=10, context=context) as s:
-                if debug_on: s.set_debuglevel(1)
-                t_conn = time.time()
-                s.ehlo()
-                s.login(SMTP_USER, SMTP_PASS)
-                t_auth = time.time()
-                s.sendmail(SMTP_FROM, [to_email], msg.as_string())
-                t_send = time.time()
-        else:
-            context = ssl.create_default_context()
-            with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT), timeout=10) as s:
-                if debug_on: s.set_debuglevel(1)
-                t_conn = time.time()
-                s.ehlo()
-                s.starttls(context=context)
-                t_tls = time.time()
-                s.ehlo()
-                s.login(SMTP_USER, SMTP_PASS)
-                t_auth = time.time()
-                s.sendmail(SMTP_FROM, [to_email], msg.as_string())
-                t_send = time.time()
-                print(f"[email] timings: connect={(t_conn-t0):.3f}s  tls={(t_tls-t_conn):.3f}s  "
-                      f"auth={(t_auth-t_tls):.3f}s  send={(t_send-t_auth):.3f}s  total={(t_send-t0):.3f}s")
+        params = {
+            "from": os.getenv("RESEND_FROM", "Navona <navona@resend.dev>"),
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body
+        }
+        resend.Emails.send(params)
+        print("[email] Sent via Resend ✅")
         return True
-    except (socket.timeout, smtplib.SMTPResponseException, smtplib.SMTPException, OSError) as e:
-        print("[email] FAILED:", e)
+    except Exception as e:
+        print("[email] FAILED ❌", e)
         return False
 
-
-def send_email_async(to_email: str, subject: str, html_body: str, otp: str = "") -> None:
-    def _run():
-        sent = send_email(to_email, subject, html_body)
-        if not sent and os.getenv("DEV_SHOW_OTP", "false").lower() == "true" and otp:
-            print(f"[DEV_ONLY_OTP] email={to_email} otp={otp}")
-    Thread(target=_run, daemon=True).start()
-
+# ---------- OTP helpers (add below send_email) ----------
 def generate_otp() -> str:
+    # 6-digit numeric OTP
     return f"{random.randint(100000, 999999)}"
 
 def otp_expiry_iso() -> str:
+    # UTC ISO timestamp for expiry
     return (datetime.utcnow() + timedelta(minutes=OTP_EXP_MINUTES)).isoformat()
+
+def send_email_async(to_email: str, subject: str, html_body: str, otp: str = "") -> None:
+    # Fire-and-forget email send; logs OTP in dev if sending fails
+    def _run():
+        ok = send_email(to_email, subject, html_body)
+        if not ok and (os.getenv("DEV_SHOW_OTP", "false").lower() == "true") and otp:
+            print(f"[DEV_ONLY_OTP] email={to_email} otp={otp}")
+    Thread(target=_run, daemon=True).start()
+
+
 
 # ---------- Groq helper ----------
 def call_groq_generate_roadmap(goal, skill_level, time_per_day, deadline, resource_preference):
