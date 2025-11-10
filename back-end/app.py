@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, request, redirect, session, jsonify, render_template, flash, send_file
+from flask import Flask, send_from_directory, request, redirect, session, jsonify, render_template, flash
 from flask_cors import CORS
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -42,18 +42,8 @@ STYLES_DIR = os.path.join(BASE_DIR, "front-end", "styles")
 print("FRONT_DIR exists?", os.path.exists(FRONT_DIR))
 print("index.html exists?", os.path.exists(os.path.join(FRONT_DIR, "index.html")))
 
-import json, os
-
-TMP_DIR = os.path.join(APP_DIR, "tmp")
-os.makedirs(TMP_DIR, exist_ok=True)
-
-def _ctx_path_for(uid: int) -> str:
-    return os.path.join(TMP_DIR, f"roadmap_{uid}.json")
-
-
 # ---------- Flask app ----------
-app = Flask(__name__, static_folder=FRONT_DIR, static_url_path="/static", template_folder=PAGES_DIR)
-
+app = Flask(__name__, static_folder=PAGES_DIR, static_url_path="", template_folder=PAGES_DIR)
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
@@ -824,22 +814,6 @@ def generate_page():
         return f"Roadmap generation failed: {e}", 500
 
     conn.close()
-
-    # Keep the last page context for PDF (server-side, not in cookie)
-    ctx = {
-        "goal": final_goal,
-        "skill": skill,
-        "time_per_day": time_per_day,
-        "deadline": deadline,
-        "resource_preference": resource,
-        "roadmap": roadmap,
-    }
-    with open(_ctx_path_for(uid), "w", encoding="utf-8") as f:
-        json.dump(ctx, f)
-
-    # Optional tiny flag in session (safe for cookie size)
-    session["last_ctx_key"] = f"roadmap_{uid}"
-
     return render_template(
         "output.html",
         user=get_current_user(),
@@ -850,68 +824,6 @@ def generate_page():
         resource_preference=resource,
         roadmap=roadmap
     )
-
-from io import BytesIO
-import asyncio
-from playwright.async_api import async_playwright
-
-@app.route("/download-pdf", methods=["GET"])
-@login_required
-def download_pdf():
-    uid = session.get("user_id")
-    path = _ctx_path_for(uid)
-    if not (uid and os.path.exists(path)):
-        return "Nothing to export. Please generate a roadmap first.", 400
-
-    # Load the server-side stash
-    with open(path, "r", encoding="utf-8") as f:
-        ctx = json.load(f)
-
-    # Render the same HTML as the screen page
-    html = render_template(
-        "output.html",
-        user=get_current_user(),
-        goal=ctx["goal"],
-        skill=ctx["skill"],
-        time_per_day=ctx["time_per_day"],
-        deadline=ctx["deadline"],
-        resource_preference=ctx["resource_preference"],
-        roadmap=ctx["roadmap"],
-    )
-
-    # Make relative URLs work while printing
-    base = request.url_root.rstrip("/")
-    if "<head>" in html:
-        html = html.replace("<head>", f'<head><base href="{base}/">', 1)
-    else:
-        html = f'<head><base href="{base}/"></head>' + html
-
-    async def _make_pdf(the_html: str) -> bytes:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"]
-            )
-            context = await browser.new_context()
-            page = await context.new_page()
-            await page.set_content(the_html, wait_until="networkidle")
-            pdf_bytes = await page.pdf(
-                format="A4",
-                print_background=True,
-                margin={"top": "16mm", "right": "12mm", "bottom": "16mm", "left": "12mm"},
-                display_header_footer=False,
-            )
-            await browser.close()
-            return pdf_bytes
-
-    pdf = asyncio.run(_make_pdf(html))
-    return send_file(
-        BytesIO(pdf),
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name="navona-roadmap.pdf",
-    )
-
 
 # ---------- Dashboard / SMTP diag ----------
 @app.route("/__smtp_diag")
