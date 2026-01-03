@@ -208,3 +208,14 @@ body {
     padding: 1rem 1.5rem;
   }
 }
+
+.error-message {
+  background: #ffe6e6;
+  color: #b00020;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+
