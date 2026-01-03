@@ -491,6 +491,18 @@ def get_current_user():
 def terms():
     return send_from_directory(PAGES_DIR, "terms.html")
 
+@app.route("/about")
+def about():
+    return send_from_directory(PAGES_DIR, "about.html")
+
+@app.route("/features")
+def features():
+    return send_from_directory(PAGES_DIR, "features.html")
+
+@app.route("/howitworks")
+def howitworks():
+    return send_from_directory(PAGES_DIR, "howitworks.html")
+
 @app.route("/login", methods=["GET", "POST", "HEAD"])
 def login():
     if request.method == "HEAD":
