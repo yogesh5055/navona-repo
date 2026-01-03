@@ -137,3 +137,135 @@ body {
     text-align: center;
   }
 }
+
+/* REVIEW SECTION */
+/* REVIEW SECTION */
+.reviews {
+  margin: 3rem 0 2rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  justify-items: center;
+}
+
+
+.review-card {
+  background: rgba(255, 255, 255, 0.95);
+   width: 100%;
+  max-width: 300px;
+  padding: 1.5rem 1.2rem;
+  border-radius: 18px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  transition: transform 0.3s ease;
+}
+
+
+.review-card:hover {
+  transform: translateY(-6px);
+}
+
+.review-img {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 0.8rem;
+}
+
+.review-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.4rem;
+}
+
+.review-card p {
+  font-size: 0.85rem;
+  color: #475569;
+  line-height: 1.5;
+  margin-bottom: 0.8rem;
+}
+
+.linkedin {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #0077b5;
+  text-decoration: none;
+}
+
+.linkedin:hover {
+  text-decoration: underline;
+}
+
+
+@media (max-width: 900px) {
+  .reviews {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .reviews {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* NAV LINKS */
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.nav-links a {
+  text-decoration: none;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.nav-signup {
+  background: #0077ff;
+  color: #fff !important;
+  padding: 0.45rem 1.1rem;
+  border-radius: 20px;
+}
+
+/* HAMBURGER */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  cursor: pointer;
+  gap: 5px;
+}
+
+.hamburger span {
+  width: 24px;
+  height: 3px;
+  background: #1e293b;
+  border-radius: 2px;
+}
+
+/* MOBILE */
+@media (max-width: 768px) {
+  .hamburger {
+    display: flex;
+  }
+
+  .nav-links {
+    position: absolute;
+    top: 70px;
+    right: 20px;
+    background: #ffffff;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    display: none;
+  }
+
+  .nav-links.show {
+    display: flex;
+  }
+}
