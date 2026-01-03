@@ -6,27 +6,85 @@
   <title>Navona | Roadmap Generator</title>
   <link rel="stylesheet" href="styles/home.css">
   <link class="icon" rel="icon" href="icon.jpg">
+  
+
 </head>
 <body>
   <header class="navbar">
-    <a class="lo" href="index.html">
-      <div class="logo">Navona</div>
-    </a>
-  </header>
+  <a class="lo" href="index.html">
+    <div class="logo">Navona</div>
+  </a>
+
+  <!-- Hamburger -->
+  <div class="hamburger" onclick="toggleMenu()">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <!-- Nav Links -->
+  <nav class="nav-links" id="navMenu">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How it Works</a>
+    <a href="#about">About</a>
+    <a href="login.html">Login</a>
+    <a href="signup.html" class="nav-signup">Sign Up</a>
+  </nav>
+</header>
+
 
   <section class="hero">
     <div class="hero-content">
       <h1>Design Your Perfect Learning Roadmap</h1>
       <p>Navona helps you build a personalized roadmap based on your skills, interests, and career goals.</p>
+      
+      
       <div class="buttons">
         <a href="signup.html" class="btn primary">Sign Up</a>
         <a href="login.html" class="btn secondary">Login</a>
       </div>
+      
+      <!-- REVIEW SECTION -->
+<div class="reviews">
+  
+  <div class="review-card">
+    <img src="/images/user1.png" alt="User 1" class="review-img">
+    <h3>Agilesh S</h3>
+    <p>Navona helped me plan my learning clearly. I stopped wasting time and started progressing.</p>
+    <a href="https://www.linkedin.com/in/agilesh-s-236b35257/" target="_blank" class="linkedin">LinkedIn</a>
+  </div>
+
+  <div class="review-card">
+    <img src="/images/user1.png" alt="User 2" class="review-img">
+    <h3>Aravindh V</h3>
+    <p>The roadmap felt personal and practical. Perfect for beginners like me.</p>
+    <a href="https://www.linkedin.com/in/aravindh-v-01b9b2257/" target="_blank" class="linkedin">LinkedIn</a>
+  </div>
+
+  <div class="review-card">
+    <img src="/images/user1.png" alt="User 3" class="review-img">
+    <h3>Balamurugan S</h3>
+    <p>Clean UI, clear direction, and no confusion. Exactly what I needed.</p>
+    <a href="https://www.linkedin.com/in/balamurugan-s-b04aa8257/" target="_blank" class="linkedin">LinkedIn</a>
+  </div>
+  
+
+</div>
+
+
     </div>
   </section>
 
   <footer class="footer">
-    <p>© 2025 Navona. All rights reserved.</p>
+    <p>© 2026 Navona. All rights reserved.</p>
   </footer>
+
+
+  <script>
+  function toggleMenu() {
+    document.getElementById("navMenu").classList.toggle("show");
+  }
+</script>
+
 </body>
 </html>
