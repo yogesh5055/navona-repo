@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Features | Navona</title>
+  <link rel="stylesheet" href="styles/features.css">
+</head>
+<body>
+
+<header class="navbar">
+  <a class="lo" href="index.html">
+    <div class="logo">Navona</div>
+  </a>
+
+  <div class="hamburger" onclick="toggleMenu()">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <nav class="nav-links" id="navMenu">
+    <a href="/features">Features</a>
+    <a href="/howitworks">How it Works</a>
+    <a href="/about">About</a>
+    <a href="/login">Login</a>
+    <a href="/signup" class="nav-signup">Sign Up</a>
+  </nav>
+</header>
+
+<section class="features">
+  <div class="features-header">
+    <h1>Features</h1>
+    <p>Everything you need to learn with clarity and direction.</p>
+  </div>
+
+  <div class="features-grid">
+
+    <div class="feature-card">
+      <h3>Personalized Roadmaps</h3>
+      <p>
+        Get learning paths tailored to your current skills, goals,
+        and available time. No generic plans.
+      </p>
+    </div>
+
+    <div class="feature-card">
+      <h3>Beginner Friendly</h3>
+      <p>
+        Designed for absolute beginners. Clear steps,
+        simple explanations, and zero confusion.
+      </p>
+    </div>
+
+    <div class="feature-card">
+      <h3>Focused Learning</h3>
+      <p>
+        Learn only what matters. No distractions,
+        no unnecessary topics, just essentials.
+      </p>
+    </div>
+
+    <div class="feature-card">
+      <h3>Time Efficient</h3>
+      <p>
+        Smart sequencing helps you save time
+        and avoid jumping between random resources.
+      </p>
+    </div>
+
+    <div class="feature-card">
+      <h3>Career Oriented</h3>
+      <p>
+        Roadmaps aligned with real-world skills
+        and job-oriented learning paths.
+      </p>
+    </div>
+
+    <div class="feature-card">
+      <h3>Simple & Clean UI</h3>
+      <p>
+        Minimal interface so you focus on learning,
+        not figuring out how to use the platform.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<footer class="footer">
+  <p>© 2025 Navona. All rights reserved.</p>
+</footer>
+
+<script>
+  function toggleMenu() {
+    document.getElementById("navMenu").classList.toggle("show");
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How It Works | Navona</title>
+  <link rel="stylesheet" href="styles/howitworks.css" />
+</head>
+<body>
+
+<header class="navbar">
+  <a class="lo" href="index.html">
+    <div class="logo">Navona</div>
+  </a>
+
+  <div class="hamburger" onclick="toggleMenu()">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <nav class="nav-links" id="navMenu">
+    <a href="index.html">Home</a>
+    <a href="features.html">Features</a>
+    <a href="how-it-works.html">How it Works</a>
+    <a href="about.html">About</a>
+    <a href="/login">Login</a>
+    <a href="/signup" class="nav-signup">Sign Up</a>
+  </nav>
+</header>
+
+<section class="how">
+  <div class="how-header">
+    <h1>How Navona Works</h1>
+    <p>
+      Navona creates personalized, AI-powered learning roadmaps
+      to help you achieve your goals with clarity and structure.
+    </p>
+  </div>
+
+  <div class="steps">
+
+    <div class="step-card">
+      <span class="step-number">1</span>
+      <h3>Sign Up or Log In</h3>
+      <p>
+        Create your account or log in securely to access
+        your personalized learning dashboard.
+      </p>
+    </div>
+
+    <div class="step-card">
+      <span class="step-number">2</span>
+      <h3>Enter Your Details</h3>
+      <p>
+        Provide your goal, current skill level, daily study time,
+        and target deadline.
+      </p>
+    </div>
+
+    <div class="step-card">
+      <span class="step-number">3</span>
+      <h3>AI Generates Your Roadmap</h3>
+      <p>
+        Our AI builds a structured weekly roadmap with topics,
+        tasks, and curated resources.
+      </p>
+    </div>
+
+    <div class="step-card">
+      <span class="step-number">4</span>
+      <h3>View & Track Progress</h3>
+      <p>
+        Follow your roadmap week by week and stay focused
+        on what truly matters.
+      </p>
+    </div>
+
+
+    <div class="step-card">
+      <span class="step-number">5</span>
+      <h3>Modify Anytime</h3>
+      <p>
+        Update your preferences and regenerate your roadmap
+        whenever your goals change.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<footer class="footer">
+  <p>© 2025 Navona. All rights reserved.</p>
+</footer>
+
+<script>
+  function toggleMenu() {
+    document.getElementById("navMenu").classList.toggle("show");
+  }
+</script>
+
+</body>
+</html>
