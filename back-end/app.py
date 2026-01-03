@@ -51,6 +51,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "navona_dev_secret_key")
 CORS(app)
 
+
 # ---------- Groq sanity print ----------
 print("key present?", bool(os.getenv("GROQ_API_KEY")))
 try:
@@ -496,31 +497,57 @@ def login():
         return ("", 200)
 
     if request.method == "GET":
-        return send_from_directory(PAGES_DIR, "login.html")
+        return render_template("login.html")
 
+    # POST
     email = (request.form.get("email") or "").strip().lower()
     password = (request.form.get("password") or "").strip()
+
     if not email or not password:
-        return jsonify({"error": "Email and password required"}), 400
+        return render_template(
+            "login.html",
+            error="Email and password are required",
+            email=email
+        )
 
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, name, password, provider, is_verified FROM users WHERE email=?", (email,))
+    cur.execute(
+        "SELECT id, name, password, provider, is_verified FROM users WHERE email=?",
+        (email,)
+    )
     user = cur.fetchone()
     conn.close()
 
     if not user:
-        return jsonify({"error": "No account found with this email"}), 404
+        return render_template(
+            "login.html",
+            error="No account found with this email",
+            email=email
+        )
+
     if user[3] == "google":
-        return jsonify({"error": "This account uses Google Sign-In. Click 'Continue with Google'."}), 401
+        return render_template(
+            "login.html",
+            error="This account uses Google Sign-In. Click 'Continue with Google'.",
+            email=email
+        )
+
     if not check_password_hash(user[2], password):
-        return jsonify({"error": "Incorrect password"}), 401
+        return render_template(
+            "login.html",
+            error="Incorrect password",
+            email=email
+        )
+
     if int(user[4] or 0) == 0:
         session["pending_email"] = email
         return redirect(f"/verify?email={email}", code=303)
+
     session["user_id"] = user[0]
     session["user_name"] = user[1]
     return redirect("/dashboard")
+
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -532,13 +559,36 @@ def signup():
     password = (request.form.get("password") or "").strip()
 
     if not name or not email or not password:
-        return jsonify({"error": "All fields are required"}), 400
+        return render_template(
+            "signup.html",
+            error="All fields are required",
+            name=name,
+            email=email
+        )
+
     if not re.match(r"^[A-Za-z ]+$", name):
-        return jsonify({"error": "Invalid name. Use letters and spaces only."}), 400
+        return render_template(
+            "signup.html",
+            error="Invalid name. Use letters and spaces only.",
+            name=name,
+            email=email
+        )
+
     if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", email):
-        return jsonify({"error": "Invalid email format."}), 400
+        return render_template(
+            "signup.html",
+            error="Invalid email format.",
+            name=name,
+            email=email
+        )
+
     if not re.match(r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$", password):
-        return jsonify({"error": "Weak password. Use 8+ chars with Aa1&"}), 400
+        return render_template(
+            "signup.html",
+            error="Weak password. Use 8+ chars with Aa1&",
+            name=name,
+            email=email
+        )
 
     conn = get_db()
     cur = conn.cursor()
@@ -547,7 +597,12 @@ def signup():
     cur.execute("SELECT id FROM users WHERE email=?", (email,))
     if cur.fetchone():
         conn.close()
-        return jsonify({"error": "Email already registered"}), 409
+        return render_template(
+            "signup.html",
+            error="Email already registered",
+            name=name,
+            email=email
+        )
 
     # create user (unverified)
     hashed = generate_password_hash(password)
@@ -566,7 +621,7 @@ def signup():
 
     conn.commit()
 
-    # generate + store OTP (UPDATE existing row — do NOT insert again)
+    # generate + store OTP
     otp = generate_otp()
     otp_hash = generate_password_hash(otp)
     cur.execute(
@@ -586,14 +641,13 @@ def signup():
     </div>
     """
 
-    # non-blocking email send (redirect is instant)
     send_email_async(email, "Navona – Verify your email", html, otp=otp)
 
     conn.close()
 
-    # go to verify page (POST -> GET)
     session["pending_email"] = email
     return redirect(f"/verify?email={email}", code=303)
+
 
 # ---------- Static: CSS ----------
 @app.route("/styles/<path:filename>")
@@ -606,6 +660,7 @@ IMAGES_DIR = os.path.join(BASE_DIR, "front-end", "images")
 @app.route("/images/<path:filename>")
 def images(filename):
     return send_from_directory(IMAGES_DIR, filename)
+
 
 # ---------- Google OAuth ----------
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -858,6 +913,9 @@ def __smtp_diag():
         "to": to
     }, (200 if ok else 500)
 
+
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -870,6 +928,9 @@ def dashboard():
 def logout():
     session.clear()
     return redirect("/")
+
+
+
 
 # ---------- Local dev entry ----------
 if __name__ == "__main__":
