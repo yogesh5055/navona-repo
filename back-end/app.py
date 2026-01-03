@@ -600,6 +600,13 @@ def signup():
 def styles(filename):
     return send_from_directory(STYLES_DIR, filename)
 
+# ---------- Static: Images ----------
+IMAGES_DIR = os.path.join(BASE_DIR, "front-end", "images")
+
+@app.route("/images/<path:filename>")
+def images(filename):
+    return send_from_directory(IMAGES_DIR, filename)
+
 # ---------- Google OAuth ----------
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
