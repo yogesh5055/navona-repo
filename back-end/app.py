@@ -552,7 +552,8 @@ def login():
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "GET":
-        return send_from_directory(PAGES_DIR, "signup.html")
+        return render_template("signup.html")
+
 
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip().lower()
