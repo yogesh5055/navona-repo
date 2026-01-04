@@ -17,26 +17,92 @@ body {
   color: #333;
 }
 
-/* NAVBAR */
+/* ================= NAVBAR ================= */
 .navbar {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  padding: 1rem 3rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  padding: 1.2rem 3rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
 .logo {
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: #0078ff;
-  text-decoration: none;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #0077ff;
 }
 
-.lo{
-    text-decoration: none;
+.lo {
+  text-decoration: none;
+  display: inline-flex;      /* IMPORTANT */
+  align-items: center;
+}
+
+/* NAV LINKS (DESKTOP) */
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+.nav-links a {
+  text-decoration: none;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.nav-signup {
+  background: #0077ff;
+  color: #ffffff !important;
+  padding: 0.45rem 1.1rem;
+  border-radius: 20px;
+}
+
+/* HAMBURGER */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  cursor: pointer;
+  gap: 5px;
+  margin-left: auto;
+  z-index: 10001;
+}
+
+.hamburger span {
+  width: 24px;
+  height: 3px;
+  background: #1e293b;
+  border-radius: 2px;
+}
+
+/* ================= MOBILE ================= */
+@media (max-width: 768px) {
+
+  .hamburger {
+    display: flex;
+  }
+
+  .nav-links {
+    position: fixed;
+    top: 70px;
+    right: 16px;          /* opens on RIGHT */
+    left: auto;
+    background: #ffffff;
+    flex-direction: column;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    display: none;
+    z-index: 9999;
+  }
+
+  .nav-links.show {
+    display: flex;
+  }
 }
 
 /* SIGN-UP SECTION */
@@ -218,5 +284,4 @@ body {
   margin-bottom: 15px;
   font-size: 14px;
 }
-
 
