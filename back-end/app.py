@@ -503,6 +503,10 @@ def features():
 def howitworks():
     return send_from_directory(PAGES_DIR, "howitworks.html")
 
+# @app.route("/contact")
+# def contact():
+#     return send_from_directory(PAGES_DIR, "contact.html")
+
 @app.route("/login", methods=["GET", "POST", "HEAD"])
 def login():
     if request.method == "HEAD":
@@ -559,6 +563,35 @@ def login():
     session["user_id"] = user[0]
     session["user_name"] = user[1]
     return redirect("/dashboard")
+
+@app.route("/contact", methods=["GET", "POST"])
+def contact_submit():
+    if request.method == "GET":
+        return render_template("contact.html")
+    name = request.form.get("name")
+    email = request.form.get("email")
+    reason = request.form.get("reason")
+    message = request.form.get("message")
+
+    if not name or not email or not message:
+        return redirect("/contact?error=Please fill all required fields")
+
+    html = f"""
+    <h3>New Navona Contact</h3>
+    <p><b>Name:</b> {name}</p>
+    <p><b>Email:</b> {email}</p>
+    <p><b>Reason:</b> {reason}</p>
+    <p><b>Message:</b><br>{message}</p>
+    """
+
+    send_email(
+        to_email="navonaotp@gmail.com",
+        subject="Navona – Contact Message",
+        html_body=html
+    )
+
+    return redirect("/contact?sent=1")
+
 
 
 @app.route("/signup", methods=["GET", "POST"])
