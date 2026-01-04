@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact | Navona</title>
+  <link rel="stylesheet" href="styles/contact.css">
+</head>
+<body>
+ 
+
+
+<header class="navbar">
+  <a class="lo" href="/">
+    <div class="logo">Navona</div>
+  </a>
+
+  <div class="hamburger" onclick="toggleMenu()">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <nav class="nav-links" id="navMenu">
+    <a href="/features">Features</a>
+    <a href="/howitworks">How it Works</a>
+    <a href="/about">About</a>
+    <a href="/contact">Contact</a>
+    <a href="/login">Login</a>
+    <a href="/signup" class="nav-signup">Sign Up</a>
+  </nav>
+</header>
+
+<section class="contact">
+  <div class="contact-container">
+
+    <!-- LEFT -->
+    <div class="contact-info">
+      <h1>Contact</h1>
+      <p>
+        Have a question or feedback?  
+        You might find your answer below. If not, feel free to reach out.
+      </p>
+
+      <div class="faq">
+        <h2>FAQs</h2>
+
+        <div class="faq-item">
+          <h4>Is Navona free?</h4>
+          <p>Yes. You get limited free roadmap generations to start with.</p>
+        </div>
+
+        <div class="faq-item">
+          <h4>Can I regenerate my roadmap?</h4>
+          <p>Yes. You can update your preferences and generate a new roadmap anytime.</p>
+        </div>
+
+        <div class="faq-item">
+          <h4>Is my data safe?</h4>
+          <p>Your data is securely stored and never shared with third parties.</p>
+        </div>
+
+        <div class="faq-item">
+          <h4>Who is Navona for?</h4>
+          <p>Students, beginners, and anyone seeking clear learning direction.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <form class="contact-form" method="post" action="/contact">
+      <h2>Send a Message</h2>
+{% if request.args.get('error') %}
+  <p class="form-error">
+    {{ request.args.get('error') }}
+  </p>
+{% endif %}
+
+{% if request.args.get('sent') %}
+  <p class="form-success">
+    Thanks! Your message has been sent.
+  </p>
+{% endif %}
+
+      <input type="text" name="name" placeholder="Your Name" required>
+      <input type="email" name="email" placeholder="Your Email" required>
+
+      <select name="reason" required>
+        <option value="">Reason for contact</option>
+        <option>Feedback</option>
+        <option>Bug / Issue</option>
+        <option>Feature Request</option>
+        <option>General Question</option>
+      </select>
+
+      <textarea name="message" placeholder="Your Message" rows="5" required></textarea>
+
+      <button type="submit">Send Message</button>
+
+      <p class="response-time">We usually respond within 24–48 hours.</p>
+    </form>
+
+  </div>
+</section>
+
+<footer class="footer">
+  <p>© 2025 Navona. All rights reserved.</p>
+</footer>
+
+<script>
+  function toggleMenu() {
+    document.getElementById("navMenu").classList.toggle("show");
+  }
+</script>
+
+</body>
+</html>
