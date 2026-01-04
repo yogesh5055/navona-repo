@@ -9,8 +9,25 @@
 </head>
 <body>
   <header class="navbar">
-    <a class="lo" href="/"><div class="logo">Navona</div></a>
-  </header>
+  <a class="lo" href="/">
+    <div class="logo">Navona</div>
+  </a>
+
+  <div class="hamburger" id="hamburger">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <nav class="nav-links" id="navMenu">
+    <a href="/features">Features</a>
+    <a href="/howitworks">How it Works</a>
+    <a href="/about">About</a>
+    <a href="/contact">Contact</a>
+    <a href="/login">Login</a>
+    <a href="/signup" class="nav-signup">Sign Up</a>
+  </nav>
+</header>
 
   <section class="signup-section">
     <div class="signup-box">
@@ -73,6 +90,25 @@
   <footer class="footer">
     <p>© 2025 Navona. All rights reserved.</p>
   </footer>
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const hamburger = document.getElementById("hamburger");
+    const navMenu = document.getElementById("navMenu");
+
+    hamburger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navMenu.classList.toggle("show");
+    });
+
+    document.addEventListener("click", () => {
+      navMenu.classList.remove("show");
+    });
+
+    navMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+  });
+</script>
+
 </body>
 </html>
-
